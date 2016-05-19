@@ -18,6 +18,16 @@ In addition, the error handling and reconnect will likely not be very robust. Ag
 
 If you want to contribute, feel free to fork the repository and send me a pull request. If not, that's OK too.
 
+## Second Note: I realize the code is very amateurish
+
+I'm still cleaning up magic constants, creating functions for things that ought to be in one, and so on.
+Everything is still severely under-documented. Error-handling is practically non-existent.
+
+This is a learning experience for me, so my priority was to get something working, and then clean it up after that.
+
+In the meantime, I recommend you don't waste your time with this project. Definitely don't build something and rely on it yet. Unless you want to, but that's on you.
+
+
 ## Pre-Requisites
 
 **Net::Discord** heavily utilizes **Mojo::UserAgent** and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
