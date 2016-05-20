@@ -1,4 +1,4 @@
-# Net-Discord
+=head1 Net-Discord
 
 This is a set of Perl Modules designed to implement parts of the Discord public API.
 It is intended for users wishing to create some variety of text-chat bots.
@@ -9,7 +9,7 @@ There are three modules involved
 - **Net::Discord::REST** handles calls to the REST web API for things you want the bot to actualy *do* (eg, send a message)
 - **Net::Discord** is a wrapper that saves the user the trouble of managing both APIs manually.
 
-## Note: This module does not and likely will never implement the complete API.
+=head2 Note: This module does not and likely will never implement the complete API.
 
 This is a spare-time project, which means I will likely implement only what I need in order for my bots to function.
 I will most likely cover most text based events, but will almost certainly never implement anything for voice.
@@ -18,7 +18,7 @@ In addition, the error handling and reconnect will likely not be very robust. Ag
 
 If you want to contribute, feel free to fork the repository and send me a pull request. If not, that's OK too.
 
-## Second Note: I realize the code is very amateurish
+=head2 Second Note: I realize the code is very amateurish
 
 I'm still cleaning up magic constants, creating functions for things that ought to be in one, and so on.
 Everything is still severely under-documented. Error-handling is practically non-existent.
@@ -28,12 +28,12 @@ This is a learning experience for me, so my priority was to get something workin
 In the meantime, I recommend you don't waste your time with this project. Definitely don't build something and rely on it yet. Unless you want to, but that's on you.
 
 
-## Pre-Requisites
+=head2 Pre-Requisites
 
 **Net::Discord** heavily utilizes **Mojo::UserAgent** and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
 You'll also need **Compress::Zlib**, as some of the incoming messages are compressed Zlib blobs, and **Mojo::JSON** to convert the JSON messages into Perl structures.
 
-## Example Program
+=head3 Example Program
 
 This application creates a very basic AI Chat Bot using the Hailo module (a modern implementation of MegaHAL)
 
@@ -126,7 +126,7 @@ $discord->connect();
 
 ```
 
-## Net::Discord::Gateway
+=head2 Net::Discord::Gateway
 
 The Discord "Gateway" is a persistent Websocket connection that sends out events as they happen to all connected clients.
 This module monitors the gateway and parses events, although once connected it largely reverts to simply passing the contents of each message to the appropriate callback function, as defined by the user.
@@ -142,8 +142,55 @@ The connection process goes a little like this:
 
 Now that we're connected and sending a heartbeat, all we have to do is listen for incoming messages and pass them off to the correct handler and callback functions.
 
-## Net::Discord::REST
+=head2 Net::Discord::REST
 
 The REST module exists for when you want your bot to take some kind of action. It's a fairly simple JSON API, you just need to include your bot token in the header for calls.
 
 This module will implement calls for sending messages, indicating the user has started typing, and maybe a few other things that a text chat bot needs to be able to do.
+
+=head2 Net::Discord::Auth
+
+This module was created to implement parts of the OAuth2 authentication method for Discord.
+It is far from complete and still requires some copy/pasting, but it functions.
+Since OAuth is not required for bot clients, this module may not be included in the Net::Discord wrapper.
+Using it directly might make more sense.
+
+Creating a new Net::Discord::Auth object takes the same arguments as above, but also requires an Application ID, Shared Secret, and the Auth Code received from the browser.
+
+The only function implemented so far is request_token, which sends the auth code to the token endpoint and returns 
+- Access Token
+- Refresh Token
+- Expiration Time
+- Token Type
+- Access Scope
+
+=head3 Example Code:
+
+```perl
+
+#!/usr/bin/env perl
+
+use v5.10;
+use warnings;
+use strict;
+
+use Mojo::UserAgent;
+use Net::Discord::Auth;
+use Data::Dumper
+
+my $params = {
+    'name' => 'Last.fm NP',
+    'url' => 'https://vsterminus.ca',
+    'version' => '0.1',
+    'code'  => $ARGV[0],
+    'id'    => 'your_application_id',
+    'secret' => 'your_application_secret',
+};
+
+my $auth = Net::Discord::Auth->new($params);
+
+my $token_hash = $auth->request_token();
+
+# Do something with the result
+print Dumper($token_hash);
+```

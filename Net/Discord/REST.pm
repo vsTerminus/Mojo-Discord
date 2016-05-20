@@ -44,13 +44,6 @@ sub new
     return $self;
 }
 
-# Post the token to the token url
-sub auth
-{
-    my ($self) = @_;
-
-}
-
 sub send_message
 {
     my ($self, $dest, $content) = @_;
