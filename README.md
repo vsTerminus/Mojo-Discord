@@ -3,11 +3,12 @@
 This is a set of Perl Modules designed to implement parts of the Discord public API.
 It is intended for users wishing to create some variety of text-chat bots.
 
-There are three modules involved
+There are four modules involved
 
+- **Net::Discord::Auth** handles some basic OAuth2 Token Request functionality. Since it turns out I don't need this, it likely will not be developed much further. It is also not covered by the Net::Discord wrapper module.
 - **Net::Discord::Gateway** handles the Websocket realtime event monitoring part (connect and monitor the chat)
 - **Net::Discord::REST** handles calls to the REST web API for things you want the bot to actualy *do* (eg, send a message)
-- **Net::Discord** is a wrapper that saves the user the trouble of managing both APIs manually.
+- **Net::Discord** is a wrapper that saves the user the trouble of managing both REST and Gateway APIs manually.
 
 ## Note: This module does not and likely will never implement the complete API.
 
@@ -30,8 +31,10 @@ In the meantime, I recommend you don't waste your time with this project. Defini
 
 ## Pre-Requisites
 
-**Net::Discord** heavily utilizes **Mojo::UserAgent** and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
-You'll also need **Compress::Zlib**, as some of the incoming messages are compressed Zlib blobs, and **Mojo::JSON** to convert the JSON messages into Perl structures.
+- **Mojo::UserAgent**  and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
+- **Compress::Zlib**, as some of the incoming messages are compressed Zlib blobs
+- **Mojo::JSON** to convert the compressed JSON messages into Perl structures.
+- **Encode::Guess** to determine whether we're dealing with a compressed stream or not
 
 ### Example Program
 
@@ -69,7 +72,8 @@ my $discord = Net::Discord->new(
             'name' => $discord_name,
             'url' => $discord_url,
             'version' => $discord_version,
-            'callbacks' => $discord_callbacks
+            'callbacks' => $discord_callbacks,
+            'verbose'   => 1
         });
         
 # Callback for on_ready event, which contains a bunch of useful information
