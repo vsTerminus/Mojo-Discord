@@ -8,12 +8,12 @@ use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
 use Mojo::IOLoop;
 use Compress::Zlib;
-use Data::Dumper;
+use Encode::Guess;
 
 my %handlers = (
-    'MESSAGE_CREATE'    => { func => \&on_message_create },
-    'READY'             => { func => \&on_ready },
-    '9'                 => { func => \&on_invalid_session },
+    '0' => { 'MESSAGE_CREATE'   => { func => \&on_message_create  },
+             'READY'            => { func => \&on_ready           }},
+    '9'                         => { func => \&on_invalid_session  },
 );
 
 # Requires the Bearer Token to be passed in, along with the application's name, URL, and version.
@@ -32,6 +32,7 @@ sub new
     $self->{'url'}      = $params->{'url'};
     $self->{'version'}  = $params->{'version'};
     $self->{'callbacks'} = $params->{'callbacks'} if ( defined $params->{'callbacks'} ); 
+    $self->{'verbose'}  = ( defined $params->{'verbose'} ? $params->{'verbose'} : 0 );
 
     # API vars - Will need to be updated if the API changes
     $self->{'base_url'}     = 'https://discordapp.com/api';
@@ -76,12 +77,9 @@ sub status_update
     my $idle = $param->{'idle_since'} if defined $param->{'idle_since'};
     my $game = $param->{'game'} if defined $param->{'game'};
     my $op = 3;
-    my $d = {
-        'idle_since' => (defined $idle ? $idle : undef),
-        'game' => {
-            'name' => (defined $game ? $game : undef)
-        }
-    };
+    my $d = {};
+    $d->{'idle_since'} = ( defined $idle ? $idle : undef );
+    $d->{'game'}{'name'} = $game if defined $game;
 
     send_op($self, $op, $d);
 }
@@ -93,6 +91,9 @@ sub gateway
     my $url = $self->{'gateway_url'};
     my $ua = $self->{'ua'};
     my $tx = $ua->get($url);    # Fetch the Gateway WS URL
+
+    # Store the URL in $self
+    $self->{'websocket_url'} = $tx->res->json->{'url'};
 
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
 }
@@ -116,16 +117,17 @@ sub send_op
 
     my $json = encode_json($package);
 
-    say $json;
+    say $json if $self->{'verbose'};
 
     $tx->send($json);
 }
 
 # This sub establishes a connection to the Discord Gateway web socket
 # WS URL must be passed in.
+# Optionally pass in a boolean $reconnect (1 or 0) to tell connect whether to send an IDENTIFY or a RESUME
 sub connect
 {
-    my ($self, $url) = @_;
+    my ($self, $url, $reconnect) = @_;
 
     my $ua = $self->{'ua'};
 
@@ -136,56 +138,109 @@ sub connect
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
         say 'WebSocket handshake failed!' and return unless $tx->is_websocket;
-        say 'WebSocket Connection Established.';
+        say 'WebSocket Connection Established.' if $self->{'verbose'};
 
         $self->{'tx'} = $tx;
 
-        # First thing we have to do is identify ourselves.
-        send_ident($self, $tx);
+        # If this is a new connection, send OP 2 IDENTIFY
+        # If we are reconnecting, send OP 6 RESUME
+        (defined $reconnect and $reconnect) ? send_resume($self, $tx) : send_ident($self, $tx);
 
         # This should fire if the websocket closes for any reason.
         $tx->on(finish => sub {
-                    my ($tx, $code, $reason) = @_;
-                    say "WebSocket closed with status $code.";
-                    $tx->finish;
-                    exit;
+            my ($tx, $code, $reason) = @_;
+            on_finish($self, $tx, $code, $reason);
+        });
+
+
+        $tx->on(json => sub {
+            my ($tx, $msg) = @_;
+            on_json($self, $tx, $msg);
         });
 
         # This is the main loop - It handles all incoming messages from the server.
         $tx->on(message => sub {
             my ($tx, $msg) = @_;
-            
-            # If the message is compressed with zlib, uncompress it first.
-            my $uncompressed = uncompress($msg);
-            $msg = $uncompressed if defined $uncompressed;
-            
-            # Decode the JSON message into a perl structure
-            my $hash = decode_json $msg;
-
-            my $op_msg = "OP " . $hash->{'op'};
-        
-            $op_msg .= " SEQ " . $hash->{'s'} if defined $hash->{'s'};
-            $op_msg .= " " . $hash->{'t'} if defined $hash->{'t'};
-
-            say $op_msg;
-            
-            $self->{'s'} = $hash->{'s'} if defined $hash->{'s'};    # Update the latest Sequence Number.
-
-            # Call the relevant handler
-            if ( defined $hash->{'t'} and exists $handlers{$hash->{'t'}} )
-            {
-                $handlers{$hash->{'t'}}->{'func'}->($self, $tx, $hash);    # Call the handler function
-            }
-            elsif ( exists $handlers{$hash->{'op'}} )
-            {
-                $handlers{$hash->{'op'}}->{'func'}->($self, $tx, $hash);
-            }
-        });
-
+            on_message($self, $tx, $msg);
+        });        
     });
 
     # Start the IOLoop (Websocket connection)
     Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
+}
+
+# If the gateway closes the connection for any reason, try to reconnect.
+sub on_finish
+{
+    my ($self, $tx, $code, $reason) = @_;
+
+    say "Websocket Connection Closed with Code $code ($reason)";
+    $tx->finish;
+
+    # Reconnect
+    Net::Discord::Gateway->connect($self, $self->{'websocket_url'}, 1);
+}
+
+# Not to be confused with on_create_message, this one handles the Websocket Event, not the Discord Gateway Event.
+# on_json and on_message both receive the same events, but on_json gets nothing if the event is compressed
+# So we only handle uncompressed events, letting on_message handle the compressed ones.
+# Reason being, Compress::Zlib doesn't like wide chars in the uncompress call, but the on_json event handles them fine.
+sub on_message 
+{
+    my ($self, $tx, $msg) = @_;
+         
+    my $decode = guess_encoding($msg);
+    if ( ref($decode) ne 'Encode::utf8' )
+    {
+        # If the message is compressed with zlib, uncompress it first.
+        my $uncompressed = uncompress($msg);
+        if ( defined $uncompressed )
+        {
+            # This message was compressed! We should handle it, because on_json won't be able to.
+             
+            # Decode the JSON message into a perl structure
+            my $hash = decode_json($uncompressed);
+    
+            handle_event($self, $tx, $hash);
+        }
+    }
+}
+
+# This one is easy. $msg comes in as a perl hash already, so all we do is pass it on to handle_event as-is.
+sub on_json
+{
+    my ($self, $tx, $msg) = @_;
+
+    handle_event($self, $tx, $msg) if defined $msg;
+}
+
+# on_message and on_json are just going to pass perl hashes to this function, which will store the sequence number, optionally print some info, and then pass the data hash on to the callback function.
+sub handle_event
+{
+    my ($self, $tx, $hash) = @_;
+
+    my $op = $hash->{'op'};
+    my $t = $hash->{'t'} if defined $hash->{'t'};
+    my $s = $hash->{'s'} if defined $hash->{'s'};
+
+    my $op_msg = "OP " . $op; 
+    $op_msg .= " SEQ " . $s if defined $s;
+    $op_msg .= " " . $t if defined $t;
+
+    say $op_msg if ($self->{'verbose'});
+            
+    $self->{'s'} = $s if defined $s;    # Update the latest Sequence Number.
+
+    # Call the relevant handler
+    if ( defined $t and exists $handlers{$op}{$t} )
+    {
+        $handlers{$op}{$t}->{'func'}->($self, $tx, $hash);    # Call the handler function
+    }
+    elsif ( !defined $t and exists $handlers{$op} )
+    {
+        $handlers{$op}->{'func'}->($self, $tx, $hash);
+    }
+    # Else - unhandled event
 }
 
 # This has to be sent after connecting in order to receive a READY Packet.
@@ -203,11 +258,27 @@ sub send_ident
             '$referrer' => "", 
             '$referring_domain' => ""
         }, 
-        "compress" => "false", 
+        "compress" => \1, 
         "large_threshold" => 250
     };
 
-    say "OP 2 SEQ 0 IDENTIFY";
+    say "OP 2 SEQ 0 IDENTIFY" if $self->{'verbose'};
+    send_op($self, $op, $d);
+}
+
+# This has to be sent after reconnecting
+sub send_resume
+{
+    my ($self, $tx) = @_;
+
+    my $op = 6;
+    my $d = {
+        "token"         => $self->{'token'},
+        "session_id"    => $self->{'session_id'},
+        "seq"           => $self->{'s'}
+    };
+
+    say "OP 6 SEQ 0 RESUME" if $self->{'verbose'};
     send_op($self, $op, $d);
 }
 
@@ -223,6 +294,7 @@ sub on_ready
     $self->{'username'} = $hash->{'d'}{'user'}{'username'};
     $self->{'avatar'} = $hash->{'d'}{'user'}{'avatar'};
     $self->{'discriminator'} = $hash->{'d'}{'user'}{'discriminator'};
+    $self->{'session_id'} = $hash->{'d'}{'session_id'};
 
     # The ready packet gives us our heartbeat interval, so we can start sending those.
     $self->{'heartbeat_interval'} = $hash->{'d'}{'heartbeat_interval'} / 1000;
@@ -230,7 +302,7 @@ sub on_ready
         sub {
             my $op = 1;
             my $d = $self->{'s'};
-            say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT";
+            say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
             send_op($self, $op, $d);
         }
     );

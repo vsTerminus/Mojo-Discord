@@ -22,6 +22,7 @@ sub new
     $self->{'name'}         = $params->{'name'};
     $self->{'url'}          = $params->{'url'};
     $self->{'version'}      = $params->{'version'};
+    $self->{'verbose'}      = $params->{'verbose'} if defined $params->{'verbose'};
 
     # Store the callbacks if they exist
     $self->{'callbacks'}    = $params->{'callbacks'} if exists $params->{'callbacks'};

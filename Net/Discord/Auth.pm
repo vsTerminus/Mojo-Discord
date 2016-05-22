@@ -19,7 +19,7 @@ sub new
 {
     my ($class, $params) = @_;
 
-    die("Net::Discord::Auth requires an Authorization Code.") unless defined $params->{'code'};
+    die("Net::Discord::Auth requires an Authorization Code or Refresh Token.") unless defined $params->{'code'} or defined $params->{'refresh_token'};
     die("Net::Discord::Auth requires an Application ID.") unless defined $params->{'id'};
     die("Net::Discord::Auth requires an Application Secret.") unless defined $params->{'secret'};
     die("Net::Discord::Auth requires an Application Name.") unless defined $params->{'name'};
@@ -27,9 +27,6 @@ sub new
     die("Net::Discord::Auth requires an Application Version.") unless defined $params->{'version'};
 
     my $self = {
-        'auth' => {
-            'code'              => $params->{'code'},
-        },
         'app' => {
             'id'                => $params->{'id'},
             'secret'            => $params->{'secret'},
@@ -41,9 +38,19 @@ sub new
         'api' => {
             'base_url'          => 'https://discordapp.com/api',
             'token_url'         => 'https://discordapp.com/api/oauth2/token',
-            'grant_type'        => 'authorization_code',
         },
     };
+
+    if ( defined $params->{'code'} )
+    {
+        $self->{'auth'}{'code'}         = $params->{'code'};
+        $self->{'api'}{'grant_type'}    = 'authorization_code';
+    }
+    elsif ( defined $params->{'refresh_token'} )
+    {
+        $self->{'auth'}{'refresh_token'} = $params->{'refresh_token'};
+        $self->{'api'}{'grant_type'}    = 'refresh_token';
+    }
 
     # Create the UserAgent object
     my $ua = Mojo::UserAgent->new;
@@ -63,10 +70,18 @@ sub request_token
     my $args = {
         'client_id'         => $self->{'app'}{'id'},
         'client_secret'     => $self->{'app'}{'secret'},
-        'grant_type'        => $self->{'api'}{'grant_type'},
-        'code'              => $self->{'auth'}{'code'},
         'redirect_uri'      => $self->{'app'}{'url'},   # This isn't used, it just has to be in the request.
+        'grant_type'        => $self->{'api'}{'grant_type'},
     };
+        
+    if ( defined $self->{'auth'}{'code'} )
+    {
+        $args->{'code'}             = $self->{'auth'}{'code'};
+    }
+    elsif ( defined $self->{'auth'}{'refresh_token'} )
+    {
+        $args->{'refresh_token'}    = $self->{'auth'}{'refresh_token'};
+    }
 
     # Send the POST to the Token endpoint
     my $tx = $self->{'ua'}->post($token_url => {Accept => '*/*'} => form => $args);
