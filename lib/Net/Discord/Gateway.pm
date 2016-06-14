@@ -16,6 +16,35 @@ my %handlers = (
     '9'                         => { func => \&on_invalid_session  },
 );
 
+# Websocket Close codes defined in RFC 6455, section 11.7.
+# Also includes some Discord-specific codes from the Discord API Reference Docs
+my %close = (
+    '1000'  => 'Normal Closure',
+    '1001'  => 'Going Away',
+    '1002'  => 'Protocol Error',
+    '1003'  => 'Unsupported Data',
+    '1005'  => 'No Status Received',
+    '1006'  => 'Abnormal Closure',
+    '1007'  => 'Invalid Frame Payload Data',
+    '1008'  => 'Policy Violation',
+    '1009'  => 'Message Too Big',
+    '1010'  => 'Mandatory Extension',
+    '1011'  => 'Internal Server Err',
+    '1012'  => 'Service Restart',
+    '1013'  => 'Try Again Later',
+    '1015'  => 'TLS Handshake',
+    '4000'  => 'Unknown Error',
+    '4001'  => 'Unknown Opcode',
+    '4002'  => 'Decode Error',
+    '4003'  => 'Not Authenticated',
+    '4004'  => 'Authentication Failed',
+    '4005'  => 'Already Authenticated',
+    '4007'  => 'Invalid Sequence',
+    '4008'  => 'Rate Limited',
+    '4009'  => 'Session Timeout',
+    '4010'  => 'Invalid Shard'
+);
+
 # Requires the Bearer Token to be passed in, along with the application's name, URL, and version.
 sub new
 {
@@ -145,8 +174,6 @@ sub gw_connect
     # Add URL Params 
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
 
-
-    say "Attempting to establish connection to WebSocket..." if $self->{'verbose'};
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
         say 'WebSocket handshake failed!' and return unless $tx->is_websocket;
@@ -199,6 +226,7 @@ sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
 
+    $reason = $close{$code} if ( defined $code and !defined $reason and exists $close{$code} );
     $reason = "Unknown" unless defined $reason;
     say "Websocket Connection Closed with Code $code ($reason)";
     $tx->finish if defined $tx;
@@ -221,7 +249,7 @@ sub on_finish
 sub on_message 
 {
     my ($self, $tx, $msg) = @_;
-         
+
     my $decode = guess_encoding($msg);
     if ( ref($decode) ne 'Encode::utf8' )
     {
@@ -292,7 +320,7 @@ sub send_ident
             '$referring_domain' => ""
         }, 
         "compress" => \1, 
-        "large_threshold" => 250
+        "large_threshold" => 50
     };
 
     say "OP 2 SEQ 0 IDENTIFY" if $self->{'verbose'};
