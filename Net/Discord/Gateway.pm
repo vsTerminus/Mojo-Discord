@@ -41,7 +41,8 @@ sub new
     $self->{'gateway_encoding'} = 'json';
 
     # Other Vars
-    $self->{'agent'}    = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
+    $self->{'agent'}        = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
+    $self->{'reconnect'}    = $params->{'reconnect'} if exists $params->{'reconnect'};
 
     my $ua = Mojo::UserAgent->new;
 
@@ -123,17 +124,19 @@ sub send_op
 }
 
 # This is pretty much just a stub for connect that calls it with the reconnect parameter, triggering a RESUME instead of an IDENT after connecting.
-sub resume
+sub gw_resume
 {
-    my ($self, $url) = @_;
+    my ($self) = @_;
 
-    connect($self, $url, 1);
+    my $url = $self->{'websocket_url'}; # We already have this.
+
+    gw_connect($self, $url, 1);
 }
 
 # This sub establishes a connection to the Discord Gateway web socket
 # WS URL must be passed in.
 # Optionally pass in a boolean $reconnect (1 or 0) to tell connect whether to send an IDENTIFY or a RESUME
-sub connect
+sub gw_connect
 {
     my ($self, $url, $reconnect) = @_;
 
@@ -143,6 +146,7 @@ sub connect
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
 
 
+    say "Attempting to establish connection to WebSocket..." if $self->{'verbose'};
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
         say 'WebSocket handshake failed!' and return unless $tx->is_websocket;
@@ -178,14 +182,16 @@ sub connect
 }
 
 # For manually disconnecting the connection
-sub disconnect
+sub gw_disconnect
 {
     my ($self, $reason) = @_;
 
     $reason = "No reason specified." unless defined $reason;
 
-    $tx->finish;
-    say "Websocket Connection Closed: $reason";
+    my $tx = $self->{'tx'};
+    say "Closing Websocket: $reason" if $self->{'verbose'};
+    $tx->finish if defined $tx;
+    undef $tx;
 }
 
 # Finish the $tx if the connection is closed
@@ -195,7 +201,17 @@ sub on_finish
 
     $reason = "Unknown" unless defined $reason;
     say "Websocket Connection Closed with Code $code ($reason)";
-    $tx->finish;
+    $tx->finish if defined $tx;
+    undef $tx;
+
+    Mojo::IOLoop->stop if Mojo::IOLoop->is_running;
+
+    # If configured to reconnect on disconnect automatically, do so.
+    if ( $self->{'reconnect'} )
+    {
+        say "Reconnecting..." if $self->{'verbose'};
+        gw_resume($self);
+    }
 }
 
 # Not to be confused with on_create_message, this one handles the Websocket Event, not the Discord Gateway Event.
@@ -289,13 +305,14 @@ sub send_resume
     my ($self, $tx) = @_;
 
     my $op = 6;
+    my $s = $self->{'s'};
     my $d = {
         "token"         => $self->{'token'},
         "session_id"    => $self->{'session_id'},
         "seq"           => $self->{'s'}
     };
 
-    say "OP 6 SEQ 0 RESUME" if $self->{'verbose'};
+    say "OP $op SEQ $s RESUME" if $self->{'verbose'};
     send_op($self, $op, $d);
 }
 

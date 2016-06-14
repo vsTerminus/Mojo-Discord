@@ -24,6 +24,9 @@ sub new
     $self->{'version'}      = $params->{'version'};
     $self->{'verbose'}      = $params->{'verbose'} if defined $params->{'verbose'};
 
+    # Store the reconnect setting
+    $self->{'reconnect'}    = $params->{'reconnect'} if defined $params->{'reconnect'};
+
     # Store the callbacks if they exist
     $self->{'callbacks'}    = $params->{'callbacks'} if exists $params->{'callbacks'};
 
@@ -48,7 +51,7 @@ sub connect
     # Get Gateway URL
     my $gw_url = $self->{'gw'}->gateway;
 
-    $self->{'gw'}->connect($gw_url);
+    $self->{'gw'}->gw_connect($gw_url);
 }
 
 sub resume
@@ -58,14 +61,14 @@ sub resume
     # Get Gateway URL
     my $gw_url = $self->{'gw'}->gateway;
 
-    $self->{'gw'}->resume($gw_url);
+    $self->{'gw'}->gw_resume($gw_url);
 }
 
 sub disconnect
 {
     my ($self, $reason) = @_;
 
-    $self->{'gw'}->disconnect(-1, $reason);
+    $self->{'gw'}->gw_disconnect($reason);
 }
 
 sub send_message
