@@ -51,6 +51,23 @@ sub connect
     $self->{'gw'}->connect($gw_url);
 }
 
+sub resume
+{
+    my $self = shift;
+    
+    # Get Gateway URL
+    my $gw_url = $self->{'gw'}->gateway;
+
+    $self->{'gw'}->resume($gw_url);
+}
+
+sub disconnect
+{
+    my ($self, $reason) = @_;
+
+    $self->{'gw'}->disconnect(-1, $reason);
+}
+
 sub send_message
 {
     my ($self, $channel, $reply) = @_;

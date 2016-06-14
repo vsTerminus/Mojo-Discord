@@ -122,6 +122,14 @@ sub send_op
     $tx->send($json);
 }
 
+# This is pretty much just a stub for connect that calls it with the reconnect parameter, triggering a RESUME instead of an IDENT after connecting.
+sub resume
+{
+    my ($self, $url) = @_;
+
+    connect($self, $url, 1);
+}
+
 # This sub establishes a connection to the Discord Gateway web socket
 # WS URL must be passed in.
 # Optionally pass in a boolean $reconnect (1 or 0) to tell connect whether to send an IDENTIFY or a RESUME
@@ -169,16 +177,25 @@ sub connect
     Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 
-# If the gateway closes the connection for any reason, try to reconnect.
+# For manually disconnecting the connection
+sub disconnect
+{
+    my ($self, $reason) = @_;
+
+    $reason = "No reason specified." unless defined $reason;
+
+    $tx->finish;
+    say "Websocket Connection Closed: $reason";
+}
+
+# Finish the $tx if the connection is closed
 sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
 
+    $reason = "Unknown" unless defined $reason;
     say "Websocket Connection Closed with Code $code ($reason)";
     $tx->finish;
-
-    # Reconnect
-    Net::Discord::Gateway->connect($self, $self->{'websocket_url'}, 1);
 }
 
 # Not to be confused with on_create_message, this one handles the Websocket Event, not the Discord Gateway Event.
