@@ -358,10 +358,7 @@ sub on_invalid_session
 {
     my ($self, $tx, $hash) = @_;
 
-    say "Invalid Session.";
-
-    $tx->finish;
-    exit 1;
+    gw_disconnect($self, "Invalid Session.");
 }
 
 1;
