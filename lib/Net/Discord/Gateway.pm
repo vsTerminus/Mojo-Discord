@@ -48,20 +48,20 @@ my %close = (
 # Requires the Bearer Token to be passed in, along with the application's name, URL, and version.
 sub new
 {
-    my ($class, $params) = @_;
+    my ($class, %params) = @_;
     my $self = {};
 
-    die("Net::Discord::Gateway requires an application name.") unless defined $params->{'name'};
-    die("Net::Discord::Gateway requires an application URL.") unless defined $params->{'url'};
-    die("Net::Discord::Gateway requires an application version.") unless defined $params->{'version'};
+    die("Net::Discord::Gateway requires an application name.") unless defined $params{'name'};
+    die("Net::Discord::Gateway requires an application URL.") unless defined $params{'url'};
+    die("Net::Discord::Gateway requires an application version.") unless defined $params{'version'};
 
     # Store the name, url, version, and callbacks
-    $self->{'token'}    = $params->{'token'};
-    $self->{'name'}     = $params->{'name'};
-    $self->{'url'}      = $params->{'url'};
-    $self->{'version'}  = $params->{'version'};
-    $self->{'callbacks'} = $params->{'callbacks'} if ( defined $params->{'callbacks'} ); 
-    $self->{'verbose'}  = ( defined $params->{'verbose'} ? $params->{'verbose'} : 0 );
+    $self->{'token'}    = $params{'token'};
+    $self->{'name'}     = $params{'name'};
+    $self->{'url'}      = $params{'url'};
+    $self->{'version'}  = $params{'version'};
+    $self->{'callbacks'} = $params{'callbacks'} if ( defined $params{'callbacks'} ); 
+    $self->{'verbose'}  = ( defined $params{'verbose'} ? $params{'verbose'} : 0 );
 
     # API vars - Will need to be updated if the API changes
     $self->{'base_url'}     = 'https://discordapp.com/api';
@@ -71,7 +71,7 @@ sub new
 
     # Other Vars
     $self->{'agent'}        = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
-    $self->{'reconnect'}    = $params->{'reconnect'} if exists $params->{'reconnect'};
+    $self->{'reconnect'}    = $params{'reconnect'} if exists $params{'reconnect'};
 
     my $ua = Mojo::UserAgent->new;
 
@@ -80,7 +80,6 @@ sub new
         my ($ua, $tx) = @_;
         $tx->req->headers->authorization($self->{'token'});
     });
-
 
     $ua->transactor->name($self->{'agent'});    # Set the UserAgent for what Discord expects
     $ua->inactivity_timeout(120);   # Set the timeout to 2 minutes, well above what the Discord server expects for a heartbeat.
@@ -222,6 +221,7 @@ sub gw_disconnect
 sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
+    my $callbacks = $self->{'callbacks'};
 
     $reason = $close{$code} if ( defined $code and !defined $reason and exists $close{$code} );
     $reason = "Unknown" unless defined $reason;
@@ -229,7 +229,8 @@ sub on_finish
     $tx->finish if defined $tx;
     undef $tx;
 
-    Mojo::IOLoop->stop if Mojo::IOLoop->is_running;
+    # Send the code and reason to the on_finish callback, if the user defined one.
+    $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
 
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->{'reconnect'} )

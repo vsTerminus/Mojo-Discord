@@ -17,23 +17,23 @@ use Mojo::JSON qw(decode_json);
 
 sub new
 {
-    my ($class, $params) = @_;
+    my ($class, %params) = @_;
 
-    die("Net::Discord::Auth requires an Authorization Code or Refresh Token.") unless defined $params->{'code'} or defined $params->{'refresh_token'};
-    die("Net::Discord::Auth requires an Application ID.") unless defined $params->{'id'};
-    die("Net::Discord::Auth requires an Application Secret.") unless defined $params->{'secret'};
-    die("Net::Discord::Auth requires an Application Name.") unless defined $params->{'name'};
-    die("Net::Discord::Auth requires an Application URL.") unless defined $params->{'url'};
-    die("Net::Discord::Auth requires an Application Version.") unless defined $params->{'version'};
+    die("Net::Discord::Auth requires an Authorization Code or Refresh Token.") unless defined $params{'code'} or defined $params{'refresh_token'};
+    die("Net::Discord::Auth requires an Application ID.") unless defined $params{'id'};
+    die("Net::Discord::Auth requires an Application Secret.") unless defined $params{'secret'};
+    die("Net::Discord::Auth requires an Application Name.") unless defined $params{'name'};
+    die("Net::Discord::Auth requires an Application URL.") unless defined $params{'url'};
+    die("Net::Discord::Auth requires an Application Version.") unless defined $params{'version'};
 
     my $self = {
         'app' => {
-            'id'                => $params->{'id'},
-            'secret'            => $params->{'secret'},
-            'name'              => $params->{'name'},
-            'url'               => $params->{'url'},
-            'version'           => $params->{'version'},
-            'useragent'         => $params->{'name'} . ' (' . $params->{'url'} . ',' . $params->{'version'} . ')',
+            'id'                => $params{'id'},
+            'secret'            => $params{'secret'},
+            'name'              => $params{'name'},
+            'url'               => $params{'url'},
+            'version'           => $params{'version'},
+            'useragent'         => $params{'name'} . ' (' . $params{'url'} . ',' . $params{'version'} . ')',
         },
         'api' => {
             'base_url'          => 'https://discordapp.com/api',
@@ -41,14 +41,14 @@ sub new
         },
     };
 
-    if ( defined $params->{'code'} )
+    if ( defined $params{'code'} )
     {
-        $self->{'auth'}{'code'}         = $params->{'code'};
+        $self->{'auth'}{'code'}         = $params{'code'};
         $self->{'api'}{'grant_type'}    = 'authorization_code';
     }
-    elsif ( defined $params->{'refresh_token'} )
+    elsif ( defined $params{'refresh_token'} )
     {
-        $self->{'auth'}{'refresh_token'} = $params->{'refresh_token'};
+        $self->{'auth'}{'refresh_token'} = $params{'refresh_token'};
         $self->{'api'}{'grant_type'}    = 'refresh_token';
     }
 

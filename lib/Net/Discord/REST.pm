@@ -8,23 +8,23 @@ use Mojo::UserAgent;
 
 sub new
 {
-    my ($class, $params) = @_;
+    my ($class, %params) = @_;
     my $self = {};
 
-    die("Net::Discord::REST requires a Token.") unless defined $params->{'token'};
-    die("Net::Discord::REST requires an application name.") unless defined $params->{'name'};
-    die("Net::Discord::REST requires an application URL.") unless defined $params->{'url'};
-    die("Net::Discord::REST requires an application version.") unless defined $params->{'version'};
+    die("Net::Discord::REST requires a Token.") unless defined $params{'token'};
+    die("Net::Discord::REST requires an application name.") unless defined $params{'name'};
+    die("Net::Discord::REST requires an application URL.") unless defined $params{'url'};
+    die("Net::Discord::REST requires an application version.") unless defined $params{'version'};
 
     # Store the token, application name, url, and version
-    $self->{'token'}    = $params->{'token'};
+    $self->{'token'}    = $params{'token'};
 
     
     # API Vars - Will need to be updated if the API changes
     $self->{'base_url'}     = 'https://discordapp.com/api';
-    $self->{'name'}         = $params->{'name'};
-    $self->{'url'}          = $params->{'url'};
-    $self->{'version'}      = $params->{'version'};
+    $self->{'name'}         = $params{'name'};
+    $self->{'url'}          = $params{'url'};
+    $self->{'version'}      = $params{'version'};
     
     # Other vars
     $self->{'agent'}        = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
