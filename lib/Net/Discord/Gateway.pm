@@ -203,9 +203,6 @@ sub gw_connect
             on_message($self, $tx, $msg);
         });        
     });
-
-    # Start the IOLoop (Websocket connection)
-    Mojo::IOLoop->start unless Mojo::IOLoop->is_running;
 }
 
 # For manually disconnecting the connection
