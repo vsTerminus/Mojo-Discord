@@ -228,6 +228,7 @@ sub on_finish
     say "Websocket Connection Closed with Code $code ($reason)";
     $tx->finish if defined $tx;
     undef $tx;
+    undef $self->{'tx'};
 
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
