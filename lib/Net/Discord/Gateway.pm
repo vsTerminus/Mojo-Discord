@@ -56,22 +56,23 @@ sub new
     die("Net::Discord::Gateway requires an application version.") unless defined $params{'version'};
 
     # Store the name, url, version, and callbacks
-    $self->{'token'}    = $params{'token'};
-    $self->{'name'}     = $params{'name'};
-    $self->{'url'}      = $params{'url'};
-    $self->{'version'}  = $params{'version'};
-    $self->{'callbacks'} = $params{'callbacks'} if ( defined $params{'callbacks'} ); 
-    $self->{'verbose'}  = ( defined $params{'verbose'} ? $params{'verbose'} : 0 );
+    $self->{'token'}            = $params{'token'};
+    $self->{'name'}             = $params{'name'};
+    $self->{'url'}              = $params{'url'};
+    $self->{'version'}          = $params{'version'};
+    $self->{'callbacks'}        = $params{'callbacks'} if ( defined $params{'callbacks'} ); 
+    $self->{'verbose'}          = ( defined $params{'verbose'} ? $params{'verbose'} : 0 );
 
     # API vars - Will need to be updated if the API changes
-    $self->{'base_url'}     = 'https://discordapp.com/api';
-    $self->{'gateway_url'}   = $self->{'base_url'} . '/gateway';
-    $self->{'gateway_version'} = 4;
+    $self->{'base_url'}         = 'https://discordapp.com/api';
+    $self->{'gateway_url'}      = $self->{'base_url'} . '/gateway';
+    $self->{'gateway_version'}  = 4;
     $self->{'gateway_encoding'} = 'json';
 
     # Other Vars
-    $self->{'agent'}        = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
-    $self->{'reconnect'}    = $params{'reconnect'} if exists $params{'reconnect'};
+    $self->{'agent'}            = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
+    $self->{'reconnect'}        = $params{'reconnect'} if exists $params{'reconnect'};
+    $self->{'allow_resume'}  = 1; # Certain disconnect reasons will change this to a 0, forcing a new connection instead of a resume on reconnect.
 
     my $ua = Mojo::UserAgent->new;
 
@@ -182,7 +183,10 @@ sub gw_connect
 
         # If this is a new connection, send OP 2 IDENTIFY
         # If we are reconnecting, send OP 6 RESUME
-        (defined $reconnect and $reconnect) ? send_resume($self, $tx) : send_ident($self, $tx);
+        (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
+
+        # Reset the state of allow_resume now that we have reconnected.
+        $self->{'allow_resume'} = 1;
 
         # This should fire if the websocket closes for any reason.
         $tx->on(finish => sub {
@@ -236,8 +240,15 @@ sub on_finish
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->{'reconnect'} )
     {
-        say "Reconnecting..." if $self->{'verbose'};
-        gw_resume($self);
+        if ( $self->{'allow_resume'} )
+        {
+            say "Reconnecting and resuming previous session..." if $self->{'verbose'};
+            gw_resume($self);
+        }
+        else
+        {
+            say "Reconnecting and starting a new session..." if $self->{'verbose'};
+        }
     }
 }
 
@@ -385,6 +396,7 @@ sub on_invalid_session
 {
     my ($self, $tx, $hash) = @_;
 
+    $self->{'allow_resume'} = 0; # Have to establish a new session for this.
     gw_disconnect($self, "Invalid Session.");
 }
 
