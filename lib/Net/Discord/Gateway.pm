@@ -248,6 +248,7 @@ sub on_finish
         else
         {
             say "Reconnecting and starting a new session..." if $self->{'verbose'};
+            gw_connect($self, $self->{'websocket_url'});
         }
     }
 }
