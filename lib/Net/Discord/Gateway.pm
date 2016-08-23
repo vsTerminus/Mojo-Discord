@@ -45,6 +45,17 @@ my %close = (
     '4010'  => 'Invalid Shard'
 );
 
+# Prevent sending a reconnect following certain codes.
+# This always requires a new session to be established if these codes are encountered.
+my %no_resume = ( 
+    '1000' => 'Normal Closure',
+    '1011' => 'Internal Server Err',
+    '1012' => 'Service Restart',
+    '4007' => 'Invalid Sequence',
+    '4009' => 'Session Timeout',
+    '4010' => 'Invalid Shard'
+);
+
 # Requires the Bearer Token to be passed in, along with the application's name, URL, and version.
 sub new
 {
@@ -137,6 +148,8 @@ sub send_op
 
     my $tx = $self->{'tx'};
 
+    gw_disconnect($self, "Websocket Not Defined") unless (defined $tx);
+
     my $package = {
         'op' => $op,
         'd' => $d
@@ -173,6 +186,7 @@ sub gw_connect
 
     # Add URL Params 
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
+    say 'Connecting to ' . $url;
 
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
@@ -227,15 +241,22 @@ sub on_finish
     my ($self, $tx, $code, $reason) = @_;
     my $callbacks = $self->{'callbacks'};
 
-    $reason = $close{$code} if ( defined $code and !defined $reason and exists $close{$code} );
-    $reason = "Unknown" unless defined $reason;
+    $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
+    $reason = "Unknown" unless defined $reason and length $reason > 0;
     say "Websocket Connection Closed with Code $code ($reason)";
     $tx->finish if defined $tx;
     undef $tx;
     undef $self->{'tx'};
 
+    # Remove the heartbeat timer loop
+    Mojo::IOLoop->remove($self->{'heartbeat_loop'});
+    undef $self->{'heartbeat_loop'};
+
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
+
+    # Block reconnect for specific codes.
+    $self->{'allow_resume'} = 0 if exists $no_resume{$code};
 
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->{'reconnect'} )
@@ -250,6 +271,10 @@ sub on_finish
             say "Reconnecting and starting a new session..." if $self->{'verbose'};
             gw_connect($self, $self->{'websocket_url'});
         }
+    }
+    else
+    {
+        say "Automatic Reconnect is disabled." if $self->{'verbose'};
     }
 }
 
@@ -371,7 +396,7 @@ sub on_ready
 
     # The ready packet gives us our heartbeat interval, so we can start sending those.
     $self->{'heartbeat_interval'} = $hash->{'d'}{'heartbeat_interval'} / 1000;
-    Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
+    $self->{'heartbeat_loop'} = Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
         sub {
             my $op = 1;
             my $d = $self->{'s'};
