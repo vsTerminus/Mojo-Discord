@@ -14,6 +14,8 @@ my %handlers = (
     '0' => { 'MESSAGE_CREATE'   => { func => \&on_message_create  },
              'READY'            => { func => \&on_ready           }},
     '9'                         => { func => \&on_invalid_session  },
+    '10'                        => { func => \&on_hello },
+    '11'                        => { func => \&on_heartbeat_ack },
 );
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
@@ -49,6 +51,7 @@ my %close = (
 # This always requires a new session to be established if these codes are encountered.
 my %no_resume = ( 
     '1000' => 'Normal Closure',
+    '1009' => 'Message Too Big',
     '1011' => 'Internal Server Err',
     '1012' => 'Service Restart',
     '4007' => 'Invalid Sequence',
@@ -77,7 +80,7 @@ sub new
     # API vars - Will need to be updated if the API changes
     $self->{'base_url'}         = 'https://discordapp.com/api';
     $self->{'gateway_url'}      = $self->{'base_url'} . '/gateway';
-    $self->{'gateway_version'}  = 4;
+    $self->{'gateway_version'}  = 6;
     $self->{'gateway_encoding'} = 'json';
 
     # Other Vars
@@ -148,7 +151,12 @@ sub send_op
 
     my $tx = $self->{'tx'};
 
-    gw_disconnect($self, "Websocket Not Defined") unless (defined $tx);
+    unless ( defined $tx ) 
+    {
+        #gw_disconnect($self, "Websocket Not Defined");
+        say "Websocket not defined. Attempting to reconnect..." if $self->{'verbose'};
+        gw_connect($self, $self->{'websocket_url'}); 
+    } 
 
     my $package = {
         'op' => $op,
@@ -188,38 +196,49 @@ sub gw_connect
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
     say 'Connecting to ' . $url;
 
-    $ua->websocket($url => sub {
-        my ($ua, $tx) = @_;
-        say 'WebSocket handshake failed!' and return unless $tx->is_websocket;
-        say 'WebSocket Connection Established.' if $self->{'verbose'};
+    do { 
 
-        $self->{'tx'} = $tx;
-
-        # If this is a new connection, send OP 2 IDENTIFY
-        # If we are reconnecting, send OP 6 RESUME
-        (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
-
-        # Reset the state of allow_resume now that we have reconnected.
-        $self->{'allow_resume'} = 1;
-
-        # This should fire if the websocket closes for any reason.
-        $tx->on(finish => sub {
-            my ($tx, $code, $reason) = @_;
-            on_finish($self, $tx, $code, $reason);
+        $ua->websocket($url => sub {
+            my ($ua, $tx) = @_;
+    
+            unless ($tx->is_websocket)
+            {
+                $self->{'tx'} = undef;
+                say 'WebSocket handshake failed!';
+                return;
+            }
+    
+            say 'WebSocket Connection Established.' if $self->{'verbose'};
+    
+            $self->{'tx'} = $tx;
+    
+            # If this is a new connection, send OP 2 IDENTIFY
+            # If we are reconnecting, send OP 6 RESUME
+            (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
+    
+            # Reset the state of allow_resume now that we have reconnected.
+            $self->{'allow_resume'} = 1;
+    
+            # This should fire if the websocket closes for any reason.
+            $tx->on(finish => sub {
+                my ($tx, $code, $reason) = @_;
+                on_finish($self, $tx, $code, $reason);
+            });
+    
+    
+            $tx->on(json => sub {
+                my ($tx, $msg) = @_;
+                on_json($self, $tx, $msg);
+            });
+    
+            # This is the main loop - It handles all incoming messages from the server.
+            $tx->on(message => sub {
+                my ($tx, $msg) = @_;
+                on_message($self, $tx, $msg);
+            });        
         });
 
-
-        $tx->on(json => sub {
-            my ($tx, $msg) = @_;
-            on_json($self, $tx, $msg);
-        });
-
-        # This is the main loop - It handles all incoming messages from the server.
-        $tx->on(message => sub {
-            my ($tx, $msg) = @_;
-            on_message($self, $tx, $msg);
-        });        
-    });
+    } while ( $reconnect and !defined $self->{'tx'} );
 }
 
 # For manually disconnecting the connection
@@ -394,17 +413,6 @@ sub on_ready
     $self->{'discriminator'} = $hash->{'d'}{'user'}{'discriminator'};
     $self->{'session_id'} = $hash->{'d'}{'session_id'};
 
-    # The ready packet gives us our heartbeat interval, so we can start sending those.
-    $self->{'heartbeat_interval'} = $hash->{'d'}{'heartbeat_interval'} / 1000;
-    $self->{'heartbeat_loop'} = Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
-        sub {
-            my $op = 1;
-            my $d = $self->{'s'};
-            say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
-            send_op($self, $op, $d);
-        }
-    );
-
     $callbacks->{'on_ready'}->($hash->{'d'}) if exists $callbacks->{'on_ready'};
 }
 
@@ -424,6 +432,31 @@ sub on_invalid_session
 
     $self->{'allow_resume'} = 0; # Have to establish a new session for this.
     gw_disconnect($self, "Invalid Session.");
+}
+
+sub on_hello
+{
+    my ($self, $tx, $hash) = @_;
+
+    # The Hello packet gives us our heartbeat interval, so we can start sending those.
+    $self->{'heartbeat_interval'} = $hash->{'d'}{'heartbeat_interval'} / 1000;
+    $self->{'heartbeat_loop'} = Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
+        sub {
+            my $op = 1;
+            my $d = $self->{'s'};
+            say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
+            send_op($self, $op, $d);
+        }
+    );
+
+
+}
+
+sub on_heartbeat_ack
+{
+    my ($self, $tx, $hash) = @_;
+
+    say "OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK";
 }
 
 1;
