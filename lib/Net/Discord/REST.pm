@@ -35,7 +35,7 @@ sub new
     # Make sure the token is added to every request automatically.
     $ua->on(start => sub {
         my ($ua, $tx) = @_;
-        $tx->req->headers->authorization($self->{'token'});
+        $tx->req->headers->authorization("Bot " . $self->{'token'});
     });
 
     $self->{'ua'} = $ua;
