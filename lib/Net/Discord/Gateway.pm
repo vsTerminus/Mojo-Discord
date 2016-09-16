@@ -19,7 +19,7 @@ my %handlers = (
 );
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
-# Also includes some Discord-specific codes from the Discord API Reference Docs
+# Also includes some Discord-specific codes from the Discord API Reference Docs (Starting at 4000)
 my %close = (
     '1000'  => 'Normal Closure',
     '1001'  => 'Going Away',
@@ -49,8 +49,10 @@ my %close = (
 
 # Prevent sending a reconnect following certain codes.
 # This always requires a new session to be established if these codes are encountered.
+# Not sure if 1000 and 1001 require this, but I don't think it hurts to include them.
 my %no_resume = ( 
     '1000' => 'Normal Closure',
+    '1001' => 'Going Away',
     '1009' => 'Message Too Big',
     '1011' => 'Internal Server Err',
     '1012' => 'Service Restart',
@@ -87,6 +89,8 @@ sub new
     $self->{'agent'}            = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
     $self->{'reconnect'}        = $params{'reconnect'} if exists $params{'reconnect'};
     $self->{'allow_resume'}  = 1; # Certain disconnect reasons will change this to a 0, forcing a new connection instead of a resume on reconnect.
+    $self->{'heartbeat_check'} = 0; # Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
+                                    # This way we know very easily if something is wrong and can reconnect.
 
     my $ua = Mojo::UserAgent->new;
 
@@ -151,11 +155,12 @@ sub send_op
 
     my $tx = $self->{'tx'};
 
-    unless ( defined $tx ) 
+    if ( !defined $tx or $self->{'heartbeat_check'} > 1 ) 
     {
         #gw_disconnect($self, "Websocket Not Defined");
-        say "Websocket not defined. Attempting to reconnect..." if $self->{'verbose'};
-        gw_connect($self, $self->{'websocket_url'}); 
+        say "Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
+        gw_connect($self, gateway($self));
+        return;
     } 
 
     my $package = {
@@ -178,7 +183,7 @@ sub gw_resume
 {
     my ($self) = @_;
 
-    my $url = $self->{'websocket_url'}; # We already have this.
+    my $url = gateway($self);
 
     gw_connect($self, $url, 1);
 }
@@ -223,8 +228,7 @@ sub gw_connect
             $tx->on(finish => sub {
                 my ($tx, $code, $reason) = @_;
                 on_finish($self, $tx, $code, $reason);
-            });
-    
+            }); 
     
             $tx->on(json => sub {
                 my ($tx, $msg) = @_;
@@ -288,7 +292,7 @@ sub on_finish
         else
         {
             say "Reconnecting and starting a new session..." if $self->{'verbose'};
-            gw_connect($self, $self->{'websocket_url'});
+            gw_connect($self, gateway($self));
         }
     }
     else
@@ -445,6 +449,7 @@ sub on_hello
             my $op = 1;
             my $d = $self->{'s'};
             say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
+            $self->{'heartbeat_check'}++;
             send_op($self, $op, $d);
         }
     );
@@ -457,6 +462,7 @@ sub on_heartbeat_ack
     my ($self, $tx, $hash) = @_;
 
     say "OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK";
+    $self->{'heartbeat_check'}--;
 }
 
 1;
