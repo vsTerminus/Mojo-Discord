@@ -89,7 +89,7 @@ sub new
     $self->{'agent'}            = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
     $self->{'reconnect'}        = $params{'reconnect'} if exists $params{'reconnect'};
     $self->{'allow_resume'}  = 1; # Certain disconnect reasons will change this to a 0, forcing a new connection instead of a resume on reconnect.
-    $self->{'heartbeat_check'} = 0; # Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
+    $self->{'heartbeat_check'};   # Defaults to 0. Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
                                     # This way we know very easily if something is wrong and can reconnect.
 
     my $ua = Mojo::UserAgent->new;
@@ -102,6 +102,7 @@ sub new
 
     $ua->transactor->name($self->{'agent'});    # Set the UserAgent for what Discord expects
     $ua->inactivity_timeout(120);   # Set the timeout to 2 minutes, well above what the Discord server expects for a heartbeat.
+    $ua->connect_timeout(5);
 
     $self->{'ua'} = $ua; # Store this ua
 
@@ -157,9 +158,9 @@ sub send_op
 
     if ( !defined $tx or $self->{'heartbeat_check'} > 1 ) 
     {
-        #gw_disconnect($self, "Websocket Not Defined");
-        say "Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
-        gw_connect($self, gateway($self));
+        gw_disconnect($self, "Connection does not exist.");
+        say localtime(time) . " Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
+        on_finish($self, $tx, 4009, "Timeout: Failed heartbeat check");
         return;
     } 
 
@@ -173,7 +174,7 @@ sub send_op
 
     my $json = encode_json($package);
 
-    say $json if $self->{'verbose'};
+    say localtime(time) . " " . $json if $self->{'verbose'};
 
     $tx->send($json);
 }
@@ -199,7 +200,7 @@ sub gw_connect
 
     # Add URL Params 
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
-    say 'Connecting to ' . $url;
+    say localtime(time) . ' Connecting to ' . $url;
 
     do { 
 
@@ -209,11 +210,12 @@ sub gw_connect
             unless ($tx->is_websocket)
             {
                 $self->{'tx'} = undef;
-                say 'WebSocket handshake failed!';
+                say localtime(time) . ' WebSocket handshake failed!';
                 return;
             }
     
-            say 'WebSocket Connection Established.' if $self->{'verbose'};
+            say localtime(time) . ' WebSocket Connection Established.' if $self->{'verbose'};
+            $self->{'heartbeat_check'} = 0; # Always make sure this is set to 0 on a new connection.
     
             $self->{'tx'} = $tx;
     
@@ -253,9 +255,8 @@ sub gw_disconnect
     $reason = "No reason specified." unless defined $reason;
 
     my $tx = $self->{'tx'};
-    say "Closing Websocket: $reason" if $self->{'verbose'};
-    $tx->finish if defined $tx;
-    undef $tx;
+    say localtime(time) . " Closing Websocket: $reason" if $self->{'verbose'};
+    defined $tx ? $tx->finish : on_finish($self, $tx, $reason);
 }
 
 # Finish the $tx if the connection is closed
@@ -266,7 +267,7 @@ sub on_finish
 
     $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
-    say "Websocket Connection Closed with Code $code ($reason)";
+    say localtime(time) . " Websocket Connection Closed with Code $code ($reason)";
     $tx->finish if defined $tx;
     undef $tx;
     undef $self->{'tx'};
@@ -286,18 +287,18 @@ sub on_finish
     {
         if ( $self->{'allow_resume'} )
         {
-            say "Reconnecting and resuming previous session..." if $self->{'verbose'};
-            gw_resume($self);
+            say localtime(time) . " Reconnecting and resuming previous session..." if $self->{'verbose'};
+            Mojo::IOLoop->timer(10 => sub { gw_resume($self) });
         }
         else
         {
-            say "Reconnecting and starting a new session..." if $self->{'verbose'};
-            gw_connect($self, gateway($self));
+            say localtime(time) . " Reconnecting and starting a new session..." if $self->{'verbose'};
+            Mojo::IOLoop->timer(10 => sub { gw_connect($self, gateway($self)) });
         }
     }
     else
     {
-        say "Automatic Reconnect is disabled." if $self->{'verbose'};
+        say localtime(time) . " Automatic Reconnect is disabled." if $self->{'verbose'};
     }
 }
 
@@ -347,7 +348,7 @@ sub handle_event
     $op_msg .= " SEQ " . $s if defined $s;
     $op_msg .= " " . $t if defined $t;
 
-    say $op_msg if ($self->{'verbose'});
+    say localtime(time) . " " . $op_msg if ($self->{'verbose'});
             
     $self->{'s'} = $s if defined $s;    # Update the latest Sequence Number.
 
@@ -382,7 +383,7 @@ sub send_ident
         "large_threshold" => 50
     };
 
-    say "OP 2 SEQ 0 IDENTIFY" if $self->{'verbose'};
+    say localtime(time) . " OP 2 SEQ 0 IDENTIFY" if $self->{'verbose'};
     send_op($self, $op, $d);
 }
 
@@ -399,7 +400,7 @@ sub send_resume
         "seq"           => $self->{'s'}
     };
 
-    say "OP $op SEQ $s RESUME" if $self->{'verbose'};
+    say localtime(time) . " OP $op SEQ $s RESUME" if $self->{'verbose'};
     send_op($self, $op, $d);
 }
 
@@ -448,7 +449,7 @@ sub on_hello
         sub {
             my $op = 1;
             my $d = $self->{'s'};
-            say "OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
+            say localtime(time) . " OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
             $self->{'heartbeat_check'}++;
             send_op($self, $op, $d);
         }
@@ -461,7 +462,7 @@ sub on_heartbeat_ack
 {
     my ($self, $tx, $hash) = @_;
 
-    say "OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK";
+    say localtime(time) . " OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK";
     $self->{'heartbeat_check'}--;
 }
 
