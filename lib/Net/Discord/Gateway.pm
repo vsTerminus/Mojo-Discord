@@ -89,7 +89,7 @@ sub new
     $self->{'agent'}            = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
     $self->{'reconnect'}        = $params{'reconnect'} if exists $params{'reconnect'};
     $self->{'allow_resume'}  = 1; # Certain disconnect reasons will change this to a 0, forcing a new connection instead of a resume on reconnect.
-    $self->{'heartbeat_check'};   # Defaults to 0. Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
+    $self->{'heartbeat_check'} = 0;   # Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
                                     # This way we know very easily if something is wrong and can reconnect.
 
     my $ua = Mojo::UserAgent->new;
@@ -158,8 +158,8 @@ sub send_op
 
     if ( !defined $tx or $self->{'heartbeat_check'} > 1 ) 
     {
-        gw_disconnect($self, "Connection does not exist.");
-        say localtime(time) . " Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
+        #gw_disconnect($self, "Connection does not exist.");
+        #say localtime(time) . " Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
         on_finish($self, $tx, 4009, "Timeout: Failed heartbeat check");
         return;
     } 
@@ -273,7 +273,8 @@ sub on_finish
     undef $self->{'tx'};
 
     # Remove the heartbeat timer loop
-    Mojo::IOLoop->remove($self->{'heartbeat_loop'});
+    #say "Removing Heartbeat Timer" if $self->{'verbose'};
+    say Mojo::IOLoop->remove($self->{'heartbeat_loop'});
     undef $self->{'heartbeat_loop'};
 
     # Send the code and reason to the on_finish callback, if the user defined one.
@@ -288,12 +289,12 @@ sub on_finish
         if ( $self->{'allow_resume'} )
         {
             say localtime(time) . " Reconnecting and resuming previous session..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(10 => sub { gw_resume($self) });
+            Mojo::IOLoop->timer(30 => sub { gw_resume($self) });
         }
         else
         {
             say localtime(time) . " Reconnecting and starting a new session..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(10 => sub { gw_connect($self, gateway($self)) });
+            Mojo::IOLoop->timer(30 => sub { gw_connect($self, gateway($self)) });
         }
     }
     else
