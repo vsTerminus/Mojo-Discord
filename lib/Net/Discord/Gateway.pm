@@ -9,10 +9,14 @@ use Mojo::JSON qw(decode_json encode_json);
 use Mojo::IOLoop;
 use Compress::Zlib;
 use Encode::Guess;
+use Data::Dumper;
 
 my %handlers = (
     '0' => { 'MESSAGE_CREATE'   => { func => \&on_message_create  },
-             'READY'            => { func => \&on_ready           }},
+             'READY'            => { func => \&on_ready           },
+             'GUILD_CREATE'     => { func => \&on_guild_create    },
+           },
+
     '9'                         => { func => \&on_invalid_session  },
     '10'                        => { func => \&on_hello },
     '11'                        => { func => \&on_heartbeat_ack },
@@ -432,6 +436,15 @@ sub on_message_create
     $callbacks->{'on_message_create'}->($hash->{'d'}) if exists $callbacks->{'on_message_create'};
 }
 
+# Pretty much just like on_message_create, this just passes info on to the callbacks.
+sub on_guild_create
+{
+    my ($self, $tx, $hash) = @_;
+    my $callbacks = $self->{'callbacks'};
+
+    $callbacks->{'on_guild_create'}->($hash->{'d'}) if exists $callbacks->{'on_guild_create'};
+}
+
 sub on_invalid_session
 {
     my ($self, $tx, $hash) = @_;
@@ -463,7 +476,7 @@ sub on_heartbeat_ack
 {
     my ($self, $tx, $hash) = @_;
 
-    say localtime(time) . " OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK";
+    say localtime(time) . " OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK" if $self->{'verbose'};
     $self->{'heartbeat_check'}--;
 }
 
