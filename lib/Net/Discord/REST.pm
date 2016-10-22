@@ -52,6 +52,16 @@ sub send_message
     my $tx = $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => {'content' => $content});
 }
 
+sub get_user
+{
+    my ($self, $id) = @_;
+    
+    my $url = $self->{'base_url'} . "/users/$id";
+    my $json = $self->{'ua'}->get($url)->res->json;
+
+    return $json;
+}
+
 # Tell the channel that the bot is "typing", aka thinking about a response.
 sub start_typing
 {

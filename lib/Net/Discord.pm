@@ -72,6 +72,15 @@ sub disconnect
     $self->{'gw'}->gw_disconnect($reason);
 }
 
+sub get_user
+{
+    my ($self, $id) = @_;
+
+    my $json = $self->{'rest'}->get_user($id);
+
+    return $json;
+}
+
 sub send_message
 {
     my ($self, $channel, $reply) = @_;
