@@ -62,6 +62,33 @@ sub get_user
     return $json;
 }
 
+sub leave_guild
+{
+    my ($self, $user, $guild) = @_;
+    
+    my $url = $self->{'base_url'} . "/users/$user/guilds/$guild";
+    say "URL: $url";
+    $self->{'ua'}->delete($url => sub {
+        my ($ua, $tx) = @_;
+        say $tx->res->body;
+    });
+}
+
+sub get_guilds
+{
+    my ($self, $user) = @_;
+
+    my $url = $self->{'base_url'} . "/users/$user/guilds";
+
+    say "URL: $url";
+
+    return $self->{'ua'}->get($url => sub {
+        my ($ua, $tx) = @_;
+        say $tx->res->body;
+        return $tx->res->json;
+    });
+}
+
 # Tell the channel that the bot is "typing", aka thinking about a response.
 sub start_typing
 {

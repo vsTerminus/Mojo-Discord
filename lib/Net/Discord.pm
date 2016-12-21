@@ -81,6 +81,20 @@ sub get_user
     return $json;
 }
 
+sub get_guilds
+{
+    my ($self, $user) = @_;
+    
+    return $self->{'rest'}->get_guilds($user);
+}
+
+sub leave_guild
+{
+    my ($self, $user, $guild) = @_;
+
+    $self->{'rest'}->leave_guild($user, $guild);
+}
+
 sub send_message
 {
     my ($self, $channel, $reply) = @_;

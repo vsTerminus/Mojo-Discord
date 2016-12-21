@@ -134,7 +134,7 @@ sub status_update
     $d->{'idle_since'} = ( defined $idle ? $idle : undef );
     $d->{'game'}{'name'} = $game if defined $game;
 
-    send_op($self, $op, $d);
+    $self->send_op($op, $d);
 }
 
 # This retrieves and returns Gateway URL for connecting to Discord. 
@@ -160,11 +160,16 @@ sub send_op
 
     my $tx = $self->{'tx'};
 
-    if ( !defined $tx or $self->{'heartbeat_check'} > 1 ) 
+    if ( !defined $tx ) 
     {
-        #gw_disconnect($self, "Connection does not exist.");
-        #say localtime(time) . " Websocket not connected. Attempting to establish a new connection..." if $self->{'verbose'};
-        on_finish($self, $tx, 4009, "Timeout: Failed heartbeat check");
+        say localtime(time) . " (send_op) \$tx is undefined. Closing connection with Code 4009: Timeout";
+        $self->on_finish($tx, 4009, "Connection Timeout");
+        return;
+    }
+    elsif ( $self->{'heartbeat_check'} > 1 ) 
+    {
+        say localtime(time) . " (send_op) Failed heartbeat check. Closing connection with Code 4009: Heartbeat Failure";
+        $self->on_finish($tx, 4009, "Timeout: Heartbeat Failure");
         return;
     } 
 
@@ -188,9 +193,7 @@ sub gw_resume
 {
     my ($self) = @_;
 
-    my $url = gateway($self);
-
-    gw_connect($self, $url, 1);
+    $self->gw_connect($self->gateway(), 1);
 }
 
 # This sub establishes a connection to the Discord Gateway web socket
@@ -206,15 +209,16 @@ sub gw_connect
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
     say localtime(time) . ' Connecting to ' . $url;
 
-    do { 
+#    do { 
 
         $ua->websocket($url => sub {
             my ($ua, $tx) = @_;
     
             unless ($tx->is_websocket)
             {
-                $self->{'tx'} = undef;
-                say localtime(time) . ' WebSocket handshake failed!';
+                $self->on_finish(-1, 'Websocket Handshake Failed');
+#                $self->{'tx'} = undef;
+#                say localtime(time) . ' WebSocket handshake failed!';
                 return;
             }
     
@@ -233,22 +237,22 @@ sub gw_connect
             # This should fire if the websocket closes for any reason.
             $tx->on(finish => sub {
                 my ($tx, $code, $reason) = @_;
-                on_finish($self, $tx, $code, $reason);
+                $self->on_finish($tx, $code, $reason);
             }); 
     
             $tx->on(json => sub {
                 my ($tx, $msg) = @_;
-                on_json($self, $tx, $msg);
+                $self->on_json($tx, $msg);
             });
     
             # This is the main loop - It handles all incoming messages from the server.
             $tx->on(message => sub {
                 my ($tx, $msg) = @_;
-                on_message($self, $tx, $msg);
+                $self->on_message($tx, $msg);
             });        
         });
 
-    } while ( $reconnect and !defined $self->{'tx'} );
+#    } while ( $reconnect and !defined $self->{'tx'} );
 }
 
 # For manually disconnecting the connection
@@ -259,8 +263,8 @@ sub gw_disconnect
     $reason = "No reason specified." unless defined $reason;
 
     my $tx = $self->{'tx'};
-    say localtime(time) . " Closing Websocket: $reason" if $self->{'verbose'};
-    defined $tx ? $tx->finish : on_finish($self, $tx, $reason);
+    say localtime(time) . " (gw_disconnect) Closing Websocket: $reason" if $self->{'verbose'};
+    defined $tx ? $tx->finish : $self->on_finish($tx, 9001, $reason);
 }
 
 # Finish the $tx if the connection is closed
@@ -271,15 +275,24 @@ sub on_finish
 
     $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
-    say localtime(time) . " Websocket Connection Closed with Code $code ($reason)";
-    $tx->finish if defined $tx;
-    undef $tx;
-    undef $self->{'tx'};
+    say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)";
+
+    if ( !defined $tx )
+    {
+        say localtime(time) . " (on_finish) \$tx is not defined.";
+        die("\$tx is not defined. Cannot recover automatically.");
+    }
 
     # Remove the heartbeat timer loop
-    #say "Removing Heartbeat Timer" if $self->{'verbose'};
-    say Mojo::IOLoop->remove($self->{'heartbeat_loop'});
+    # The problem seems to be removing this if $tx goes away on its own.
+    # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
+    say localtime(time) . " Removing Heartbeat Timer" if $self->{'verbose'};
+    Mojo::IOLoop->remove($self->{'heartbeat_loop'});
     undef $self->{'heartbeat_loop'};
+
+    #$tx->finish;
+    undef $tx;
+    undef $self->{'tx'};
 
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
@@ -290,15 +303,17 @@ sub on_finish
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->{'reconnect'} )
     {
+        say localtime(time) . " Automatic reconnect is enabled." if $self->{'verbose'};
+
         if ( $self->{'allow_resume'} )
         {
-            say localtime(time) . " Reconnecting and resuming previous session..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(30 => sub { gw_resume($self) });
+            say localtime(time) . " Reconnecting and resuming previous session in 30 seconds..." if $self->{'verbose'};
+            Mojo::IOLoop->timer(15 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
-            say localtime(time) . " Reconnecting and starting a new session..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(30 => sub { gw_connect($self, gateway($self)) });
+            say localtime(time) . " Reconnecting and starting a new session in 30 seconds..." if $self->{'verbose'};
+            Mojo::IOLoop->timer(15 => sub { $self->gw_connect($self->gateway()) });
         }
     }
     else
