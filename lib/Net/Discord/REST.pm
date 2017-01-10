@@ -44,12 +44,32 @@ sub new
     return $self;
 }
 
+# send_message will check if it is being passed a hashref or a string.
+# This way it is simple to just send a message by passing in a string, but it can also support things like embeds and the TTS flag when needed.
 sub send_message
 {
-    my ($self, $dest, $content) = @_;
+    my ($self, $dest, $param) = @_;
+  
+    my $json;
+
+    if ( ref $param eq ref {} ) # If hashref just pass it along as-is.
+    {
+        $json = $param;
+    }
+    elsif ( ref $param eq ref [] )
+    {
+        say localtime(time) . "Net::Discord::REST->send_message Received array. Expected hashref or string.";
+        return -1;
+    }
+    else    # Scalar - Simple string message. Build a basic json object to send.
+    {
+        $json = {
+            'content' => $param
+        };
+    }
 
     my $post_url = $self->{'base_url'} . "/channels/$dest/messages";
-    my $tx = $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => {'content' => $content});
+    my $tx = $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => $json);
 }
 
 sub get_user

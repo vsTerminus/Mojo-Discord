@@ -95,11 +95,13 @@ sub leave_guild
     $self->{'rest'}->leave_guild($user, $guild);
 }
 
+# Supports hashref or string.
+# String for simple messages, hashref if you need to use embeds or tts flag.
 sub send_message
 {
-    my ($self, $channel, $reply) = @_;
+    my ($self, $channel, $message) = @_;
 
-    $self->{'rest'}->send_message($channel, $reply);
+    $self->{'rest'}->send_message($channel, $message);
 }
 
 sub start_typing
