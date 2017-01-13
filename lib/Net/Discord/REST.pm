@@ -5,6 +5,8 @@ use warnings;
 use strict;
 
 use Mojo::UserAgent;
+use MIME::Base64;
+use Data::Dumper;
 
 sub new
 {
@@ -48,7 +50,7 @@ sub new
 # This way it is simple to just send a message by passing in a string, but it can also support things like embeds and the TTS flag when needed.
 sub send_message
 {
-    my ($self, $dest, $param) = @_;
+    my ($self, $dest, $param, $callback) = @_;
   
     my $json;
 
@@ -69,54 +71,102 @@ sub send_message
     }
 
     my $post_url = $self->{'base_url'} . "/channels/$dest/messages";
-    my $tx = $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => $json);
+    $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+
+        $callback->($tx->res->body) if defined $callback;
+    });
 }
 
 sub get_user
 {
-    my ($self, $id) = @_;
+    my ($self, $id, $callback) = @_;
     
     my $url = $self->{'base_url'} . "/users/$id";
-    my $json = $self->{'ua'}->get($url)->res->json;
-
-    return $json;
+    $self->{'ua'}->get($url => sub 
+    {
+        my ($ua, $tx) = @_;
+        
+        $callback->($tx->res->json) if defined $callback;
+    });
 }
 
 sub leave_guild
 {
-    my ($self, $user, $guild) = @_;
+    my ($self, $user, $guild, $callback) = @_;
     
     my $url = $self->{'base_url'} . "/users/$user/guilds/$guild";
     say "URL: $url";
     $self->{'ua'}->delete($url => sub {
         my ($ua, $tx) = @_;
-        say $tx->res->body;
+        $callback->($tx->res->body) if defined $callback;
     });
 }
 
 sub get_guilds
 {
-    my ($self, $user) = @_;
+    my ($self, $user, $callback) = @_;
 
     my $url = $self->{'base_url'} . "/users/$user/guilds";
 
     say "URL: $url";
 
-    return $self->{'ua'}->get($url => sub {
+    return $self->{'ua'}->get($url => sub 
+    {
         my ($ua, $tx) = @_;
-        say $tx->res->body;
-        return $tx->res->json;
+        $callback->($tx->res->json) if defined $callback;
     });
 }
 
 # Tell the channel that the bot is "typing", aka thinking about a response.
 sub start_typing
 {
-    my ($self, $dest) = @_;
+    my ($self, $dest, $callback) = @_;
 
     my $typing_url = $self->{'base_url'} . "/channels/$dest/typing";
 
-    $self->{'ua'}->post($typing_url);
+    $self->{'ua'}->post($typing_url, sub 
+    { 
+        my ($ua, $tx) = @_;
+        $callback->($tx->res->body) if defined $callback;
+    });
+}
+
+# Create a new Webhook
+sub create_webhook
+{
+    my ($self, $channel, $name, $avatar_file, $callback) = @_;
+
+    # Check the name is valid (2-100 chars)
+    if ( length $name < 2 or length $name > 100 )
+    {
+        die("create_webhook was passed an invalid webhook name. Field must be between 2 and 100 characters in length.");
+    }
+
+    my $base64;
+    # First, convert the avatar file to base64.
+    if ( defined $avatar_file and -f $avatar_file)
+    {
+        open(IMAGE, $avatar_file);
+        my $image = <IMAGE>;
+        $base64 = encode_base64($image);
+        close(IMAGE);
+        say "First 20 chars of base64 avatar: " . substr($image,0,20);
+    }
+    # else - no big deal, it's optional.
+
+    # Next, create the JSON object.
+    my $json = { 'name' => $name };
+    $json->{'avatar'} = $base64 if defined $base64;
+
+    # Next, call the endpoint
+    my $url = $self->{'base_url'} . "/channels/$channel/webhooks";
+    $self->{'ua'}->post($url => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+        $callback->($tx->res->json) if defined $callback;
+    });
 }
 
 1;

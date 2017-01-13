@@ -6,6 +6,7 @@ use strict;
 
 use Net::Discord::Gateway;
 use Net::Discord::REST;
+use Data::Dumper;
 
 sub new
 {
@@ -74,41 +75,39 @@ sub disconnect
 
 sub get_user
 {
-    my ($self, $id) = @_;
+    my ($self, $id, $callback) = @_;
 
-    my $json = $self->{'rest'}->get_user($id);
-
-    return $json;
+    $self->{'rest'}->get_user($id, $callback);
 }
 
 sub get_guilds
 {
-    my ($self, $user) = @_;
+    my ($self, $user, $callback) = @_;
     
-    return $self->{'rest'}->get_guilds($user);
+    $self->{'rest'}->get_guilds($user, $callback);
 }
 
 sub leave_guild
 {
-    my ($self, $user, $guild) = @_;
+    my ($self, $user, $guild, $callback) = @_;
 
-    $self->{'rest'}->leave_guild($user, $guild);
+    $self->{'rest'}->leave_guild($user, $guild, $callback);
 }
 
 # Supports hashref or string.
 # String for simple messages, hashref if you need to use embeds or tts flag.
 sub send_message
 {
-    my ($self, $channel, $message) = @_;
+    my ($self, $channel, $message, $callback) = @_;
 
-    $self->{'rest'}->send_message($channel, $message);
+    $self->{'rest'}->send_message($channel, $message, $callback);
 }
 
 sub start_typing
 {
-    my ($self, $channel) = @_;
+    my ($self, $channel, $callback) = @_;
 
-    $self->{'rest'}->start_typing($channel);
+    $self->{'rest'}->start_typing($channel, $callback);
 }
 
 sub status_update
