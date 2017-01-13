@@ -136,7 +136,12 @@ sub start_typing
 # Create a new Webhook
 sub create_webhook
 {
-    my ($self, $channel, $name, $avatar_file, $callback) = @_;
+    my ($self, $channel, $params, $callback) = @_;
+
+    my $name = $params->{'name'};
+    my $avatar_file = $params->{'avatar'};
+
+    say ref $callback;
 
     # Check the name is valid (2-100 chars)
     if ( length $name < 2 or length $name > 100 )
@@ -149,22 +154,70 @@ sub create_webhook
     if ( defined $avatar_file and -f $avatar_file)
     {
         open(IMAGE, $avatar_file);
-        my $image = <IMAGE>;
-        $base64 = encode_base64($image);
+        my $raw_string = do{ local $/ = undef; <IMAGE>; };
+        $base64 = encode_base64( $raw_string );
         close(IMAGE);
-        say "First 20 chars of base64 avatar: " . substr($image,0,20);
     }
     # else - no big deal, it's optional.
 
     # Next, create the JSON object.
     my $json = { 'name' => $name };
-    $json->{'avatar'} = $base64 if defined $base64;
+
+    # Add avatar base64 info to it if an avatar file if we can.
+    my $type = ( $avatar_file =~ /.png$/ ? 'png' : 'jpeg' ) if defined $avatar_file;
+    $json->{'avatar'} = "data:image/$type;base64," . $base64 if defined $base64;
 
     # Next, call the endpoint
     my $url = $self->{'base_url'} . "/channels/$channel/webhooks";
     $self->{'ua'}->post($url => json => $json => sub
     {
         my ($ua, $tx) = @_;
+        $callback->($tx->res->json);# if defined $callback;
+    });
+}
+
+sub send_webhook
+{
+    my ($self, $channel, $id, $token, $params, $callback) = @_;
+
+    my $url = $self->{'base_url'} . "/webhooks/$id/$token";
+
+    $self->{'ua'}->post($url => json => $params => sub
+    {
+        my ($ua, $tx) = @_;
+
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+sub get_channel_webhooks
+{
+    my ($self, $channel, $callback) = @_;
+
+    die("get_channel_webhooks requires a channel ID") unless (defined $channel);
+
+    my $url = $self->{'base_url'} . "/channels/$channel/webhooks";
+
+    $self->{'ua'}->get($url => sub
+    {
+        my ($ua, $tx) = @_;
+
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+sub get_guild_webhooks
+{
+    my ($self, $guild, $callback) = @_;
+
+    die("get_guild_webhooks requires a guild ID") unless (defined $guild);
+
+    my $url = $self->{'base_url'} . "/guilds/$guild/webhooks";
+
+    $self->{'ua'}->get($url => sub
+    {
+        my ($ua, $tx) = @_;
+
         $callback->($tx->res->json) if defined $callback;
     });
 }

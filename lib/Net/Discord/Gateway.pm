@@ -15,6 +15,8 @@ my %handlers = (
     '0' => { 'MESSAGE_CREATE'   => { func => \&on_message_create  },
              'READY'            => { func => \&on_ready           },
              'GUILD_CREATE'     => { func => \&on_guild_create    },
+             'WEBHOOKS_UPDATE'  => { func => \&on_webhooks_update },
+             'TYPING_START'     => { func => \&on_typing_start    },
            },
 
     '9'                         => { func => \&on_invalid_session  },
@@ -347,6 +349,8 @@ sub on_message
     }
 }
 
+
+
 # This one is easy. $msg comes in as a perl hash already, so all we do is pass it on to handle_event as-is.
 sub on_json
 {
@@ -382,6 +386,10 @@ sub handle_event
         $handlers{$op}->{'func'}->($self, $tx, $hash);
     }
     # Else - unhandled event
+    else
+    {
+        say Dumper($hash);
+    }
 }
 
 # This has to be sent after connecting in order to receive a READY Packet.
@@ -449,6 +457,23 @@ sub on_message_create
     my $callbacks = $self->{'callbacks'};
 
     $callbacks->{'on_message_create'}->($hash->{'d'}) if exists $callbacks->{'on_message_create'};
+}
+
+# Any changes (add/delete/edit) to webhooks will trigger this. 
+sub on_webhooks_update
+{
+    my ($self, $tx, $hash) = @_;
+    my $callbacks = $self->{'callbacks'};
+
+    $callbacks->{'on_webhooks_update'}->($hash->{'d'}) if exists $callbacks->{'on_webhooks_update'};
+}
+
+sub on_typing_start
+{
+    my ($self, $tx, $hash) = @_;
+    my $callbacks = $self->{'callbacks'};
+
+    $callbacks->{'on_typing_start'}->($hash->{'d'}) if exists $callbacks->{'on_typing_start'};
 }
 
 # Pretty much just like on_message_create, this just passes info on to the callbacks.

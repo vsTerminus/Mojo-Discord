@@ -117,5 +117,33 @@ sub status_update
     $self->{'gw'}->status_update($params);
 }
 
+sub create_webhook
+{
+    my ($self, $channel, $params, $callback) = @_;
+
+    $self->{'rest'}->create_webhook($channel, $params, $callback);
+}
+
+sub send_webhook
+{
+    my ($self, $channel, $id, $token, $params, $callback) = @_;
+
+    $self->{'rest'}->send_webhook($channel, $id, $token, $params, $callback);
+}
+
+sub get_channel_webhooks
+{
+    my ($self, $channel, $callback) = @_;
+
+    $self->{'rest'}->get_channel_webhooks($channel, $callback);
+}
+
+sub get_guild_webhooks
+{
+    my ($self, $guild, $callback) = @_;
+
+    $self->{'rest'}->get_guild_webhooks($guild, $callback);
+}
+
 1;
 
