@@ -178,9 +178,17 @@ sub create_webhook
 
 sub send_webhook
 {
-    my ($self, $channel, $id, $token, $params, $callback) = @_;
+    my ($self, $channel, $hook, $params, $callback) = @_;
 
+    my $id = $hook->{'id'};
+    my $token = $hook->{'token'};
     my $url = $self->{'base_url'} . "/webhooks/$id/$token";
+
+    if ( ref $params ne ref {} )
+    {
+        # Received a scalar, convert it to a basic structure using the default avatar and name
+        $params = {'content' => $params};
+    }
 
     $self->{'ua'}->post($url => json => $params => sub
     {
