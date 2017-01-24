@@ -75,7 +75,9 @@ sub send_message
     {
         my ($ua, $tx) = @_;
 
-        $callback->($tx->res->body) if defined $callback;
+        #say Dumper($tx->res->json);
+
+        $callback->($tx->res->json) if defined $callback;
     });
 }
 
@@ -87,7 +89,9 @@ sub get_user
     $self->{'ua'}->get($url => sub 
     {
         my ($ua, $tx) = @_;
-        
+       
+        #say Dumper($tx->res->json);
+
         $callback->($tx->res->json) if defined $callback;
     });
 }

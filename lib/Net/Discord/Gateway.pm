@@ -209,7 +209,7 @@ sub gw_connect
 
     # Add URL Params 
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
-    say localtime(time) . ' Connecting to ' . $url;
+    say localtime(time) . ' Connecting to ' . $url if $self->{'verbose'};
 
 #    do { 
 
@@ -388,7 +388,7 @@ sub handle_event
     # Else - unhandled event
     else
     {
-        say Dumper($hash);
+        #say Dumper($hash);
     }
 }
 
