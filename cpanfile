@@ -1,4 +1,5 @@
 # To use: cpanm --installdeps .
+requires 'Mojo::Base';
 requires 'Mojo::UserAgent';
 requires 'Mojo::IOLoop';
 requires 'Mojo::JSON';

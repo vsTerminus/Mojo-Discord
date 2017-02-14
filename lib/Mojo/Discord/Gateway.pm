@@ -1,8 +1,8 @@
 package Mojo::Discord::Gateway;
 
-use v5.10;
-use warnings;
-use strict;
+our $VERSION = '0.001';
+
+use Mojo::Base -base;
 
 use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
@@ -67,59 +67,39 @@ my %no_resume = (
     '4010' => 'Invalid Shard'
 );
 
-# Requires the Bearer Token to be passed in, along with the application's name, URL, and version.
-sub new
+has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
+has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
+has ['heartbeat_check', 's']; # Couple things used to maintain connection
+has base_url            => 'https://discordapp.com/api';
+has gateway_url         => sub { shift->base_url . '/gateway' };
+has gateway_version     => 6;
+has gateway_encoding    => 'json';
+has agent               => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' };
+has allow_resume        => 1;
+has heartbeat_check     => 0;
+has ua                  => sub { Mojo::UserAgent->new };
+
+# Custom Constructor to set transactor name and insert token into every request
+sub new 
 {
-    my ($class, %params) = @_;
-    my $self = {};
+    my $self = shift->SUPER::new(@_);
 
-    die("Mojo::Discord::Gateway requires an application name.") unless defined $params{'name'};
-    die("Mojo::Discord::Gateway requires an application URL.") unless defined $params{'url'};
-    die("Mojo::Discord::Gateway requires an application version.") unless defined $params{'version'};
+    $self->ua->transactor->name($self->agent);
+    $self->ua->inactivity_timeout(120);
+    $self->ua->connect_timeout(5);
 
-    # Store the name, url, version, and callbacks
-    $self->{'token'}            = $params{'token'};
-    $self->{'name'}             = $params{'name'};
-    $self->{'url'}              = $params{'url'};
-    $self->{'version'}          = $params{'version'};
-    $self->{'callbacks'}        = $params{'callbacks'} if ( defined $params{'callbacks'} ); 
-    $self->{'verbose'}          = ( defined $params{'verbose'} ? $params{'verbose'} : 0 );
-
-    # API vars - Will need to be updated if the API changes
-    $self->{'base_url'}         = 'https://discordapp.com/api';
-    $self->{'gateway_url'}      = $self->{'base_url'} . '/gateway';
-    $self->{'gateway_version'}  = 6;
-    $self->{'gateway_encoding'} = 'json';
-
-    # Other Vars
-    $self->{'agent'}            = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
-    $self->{'reconnect'}        = $params{'reconnect'} if exists $params{'reconnect'};
-    $self->{'allow_resume'}  = 1; # Certain disconnect reasons will change this to a 0, forcing a new connection instead of a resume on reconnect.
-    $self->{'heartbeat_check'} = 0;   # Add 1 every time we send a heartbeat, subtract one every time we receive a heartbeat ack.
-                                    # This way we know very easily if something is wrong and can reconnect.
-
-    my $ua = Mojo::UserAgent->new;
-
-    # Make sure the token is added to every request automatically.
-    $ua->on(start => sub {
+    $self->ua->on(start => sub {
         my ($ua, $tx) = @_;
-        $tx->req->headers->authorization($self->{'token'});
+        $tx->req->headers->authorization($self->token);
     });
-
-    $ua->transactor->name($self->{'agent'});    # Set the UserAgent for what Discord expects
-    $ua->inactivity_timeout(120);   # Set the timeout to 2 minutes, well above what the Discord server expects for a heartbeat.
-    $ua->connect_timeout(5);
-
-    $self->{'ua'} = $ua; # Store this ua
-
-    bless $self, $class;
+     
     return $self;
 }
 
 sub username
 {
     my $self = shift;
-    return $self->{'username'};
+    return $self->username;
 }
 
 # This updates the client status
@@ -143,8 +123,8 @@ sub status_update
 sub gateway
 {
     my $self = shift;
-    my $url = $self->{'gateway_url'};
-    my $ua = $self->{'ua'};
+    my $url = $self->gateway_url;
+    my $ua = $self->ua;
     my $tx = $ua->get($url);    # Fetch the Gateway WS URL
 
     # Store the URL in $self
@@ -168,7 +148,7 @@ sub send_op
         $self->on_finish($tx, 4009, "Connection Timeout");
         return;
     }
-    elsif ( $self->{'heartbeat_check'} > 1 ) 
+    elsif ( $self->heartbeat_check > 1 ) 
     {
         say localtime(time) . " (send_op) Failed heartbeat check. Closing connection with Code 4009: Heartbeat Failure";
         $self->on_finish($tx, 4009, "Timeout: Heartbeat Failure");
@@ -185,7 +165,7 @@ sub send_op
 
     my $json = encode_json($package);
 
-    say localtime(time) . " " . $json if $self->{'verbose'};
+    say localtime(time) . " " . $json if $self->verbose;
 
     $tx->send($json);
 }
@@ -205,11 +185,11 @@ sub gw_connect
 {
     my ($self, $url, $reconnect) = @_;
 
-    my $ua = $self->{'ua'};
+    my $ua = $self->ua;
 
     # Add URL Params 
-    $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
-    say localtime(time) . ' Connecting to ' . $url if $self->{'verbose'};
+    $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
+    say localtime(time) . ' Connecting to ' . $url if $self->verbose;
 
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
@@ -222,17 +202,17 @@ sub gw_connect
             return;
         }
     
-        say localtime(time) . ' WebSocket Connection Established.' if $self->{'verbose'};
-        $self->{'heartbeat_check'} = 0; # Always make sure this is set to 0 on a new connection.
+        say localtime(time) . ' WebSocket Connection Established.' if $self->verbose;
+        $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
     
         $self->{'tx'} = $tx;
     
         # If this is a new connection, send OP 2 IDENTIFY
         # If we are reconnecting, send OP 6 RESUME
-        (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
+        (defined $reconnect and $reconnect and $self->allow_resume) ? send_resume($self, $tx) : send_ident($self, $tx);
     
         # Reset the state of allow_resume now that we have reconnected.
-        $self->{'allow_resume'} = 1;
+        $self->allow_resume(1);
     
         # This should fire if the websocket closes for any reason.
         $tx->on(finish => sub {
@@ -260,8 +240,8 @@ sub gw_disconnect
 
     $reason = "No reason specified." unless defined $reason;
 
-    my $tx = $self->{'tx'};
-    say localtime(time) . " (gw_disconnect) Closing Websocket: $reason" if $self->{'verbose'};
+    my $tx = $self->tx;
+    say localtime(time) . " (gw_disconnect) Closing Websocket: $reason" if $self->verbose;
     defined $tx ? $tx->finish : $self->on_finish($tx, 9001, $reason);
 }
 
@@ -269,7 +249,7 @@ sub gw_disconnect
 sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
@@ -284,12 +264,12 @@ sub on_finish
     # Remove the heartbeat timer loop
     # The problem seems to be removing this if $tx goes away on its own.
     # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
-    if ( !defined $self->{'heartbeat_loop'} )
+    if ( !defined $self->{'heartbeat_loop'})
     {
         say localtime(time) . " (on_finish) Heartbeat Loop variable is unexpectedly undefined.";
         die("Unable to remove Heartbeat Timer Loop. Cannot recover automatically.");
     }
-    say localtime(time) . " Removing Heartbeat Timer" if $self->{'verbose'};
+    say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
     Mojo::IOLoop->remove($self->{'heartbeat_loop'});
     undef $self->{'heartbeat_loop'};
 
@@ -299,30 +279,30 @@ sub on_finish
     
     #$tx->finish;
     undef $tx;
-    undef $self->{'tx'};
+    undef $self->tx;
 
     # Block reconnect for specific codes.
-    $self->{'allow_resume'} = 0 if exists $no_resume{$code};
+    $self->allow_resume(0) if exists $no_resume{$code};
 
     # If configured to reconnect on disconnect automatically, do so.
-    if ( $self->{'reconnect'} )
+    if ( $self->reconnect )
     {
-        say localtime(time) . " Automatic reconnect is enabled." if $self->{'verbose'};
+        say localtime(time) . " Automatic reconnect is enabled." if $self->verbose;
 
-        if ( $self->{'allow_resume'} )
+        if ( $self->allow_resume )
         {
-            say localtime(time) . " Reconnecting and resuming previous session in 30 seconds..." if $self->{'verbose'};
+            say localtime(time) . " Reconnecting and resuming previous session in 30 seconds..." if $self->verbose;
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
-            say localtime(time) . " Reconnecting and starting a new session in 30 seconds..." if $self->{'verbose'};
+            say localtime(time) . " Reconnecting and starting a new session in 30 seconds..." if $self->verbose;
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway()) });
         }
     }
     else
     {
-        say localtime(time) . " Automatic Reconnect is disabled." if $self->{'verbose'};
+        say localtime(time) . " Automatic Reconnect is disabled." if $self->verbose;
     }
 }
 
@@ -374,7 +354,7 @@ sub handle_event
     $op_msg .= " SEQ " . $s if defined $s;
     $op_msg .= " " . $t if defined $t;
 
-    say localtime(time) . " " . $op_msg if ($self->{'verbose'});
+    say localtime(time) . " " . $op_msg if ($self->verbose);
             
     $self->{'s'} = $s if defined $s;    # Update the latest Sequence Number.
 
@@ -401,11 +381,11 @@ sub send_ident
 
     my $op = 2;
     my $d = {
-        "token" => $self->{'token'}, 
+        "token" => $self->token, 
         "properties" => { 
             '$os' => $^O, 
-            '$browser' => $self->{'name'}, 
-            '$device' => $self->{'name'}, 
+            '$browser' => $self->name, 
+            '$device' => $self->name, 
             '$referrer' => "", 
             '$referring_domain' => ""
         }, 
@@ -413,7 +393,7 @@ sub send_ident
         "large_threshold" => 50
     };
 
-    say localtime(time) . " OP 2 SEQ 0 IDENTIFY" if $self->{'verbose'};
+    say localtime(time) . " OP 2 SEQ 0 IDENTIFY" if $self->verbose;
     send_op($self, $op, $d);
 }
 
@@ -423,14 +403,14 @@ sub send_resume
     my ($self, $tx) = @_;
 
     my $op = 6;
-    my $s = $self->{'s'};
+    my $s = $self->s;
     my $d = {
-        "token"         => $self->{'token'},
-        "session_id"    => $self->{'session_id'},
-        "seq"           => $self->{'s'}
+        "token"         => $self->token,
+        "session_id"    => $self->session_id,
+        "seq"           => $self->s
     };
 
-    say localtime(time) . " OP $op SEQ $s RESUME" if $self->{'verbose'};
+    say localtime(time) . " OP $op SEQ $s RESUME" if $self->verbose;
     send_op($self, $op, $d);
 }
 
@@ -439,14 +419,14 @@ sub send_resume
 sub on_ready
 {
     my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     # Store our user info just in case we need it later.
-    $self->{'id'} = $hash->{'d'}{'user'}{'id'};
-    $self->{'username'} = $hash->{'d'}{'user'}{'username'};
-    $self->{'avatar'} = $hash->{'d'}{'user'}{'avatar'};
-    $self->{'discriminator'} = $hash->{'d'}{'user'}{'discriminator'};
-    $self->{'session_id'} = $hash->{'d'}{'session_id'};
+    $self->id( $hash->{'d'}{'user'}{'id'} );
+    $self->username( $hash->{'d'}{'user'}{'username'} );
+    $self->avatar( $hash->{'d'}{'user'}{'avatar'} );
+    $self->discriminator( $hash->{'d'}{'user'}{'discriminator'} );
+    $self->session_id( $hash->{'d'}{'session_id'} );
 
     $callbacks->{'on_ready'}->($hash->{'d'}) if exists $callbacks->{'on_ready'};
 }
@@ -456,7 +436,7 @@ sub on_ready
 sub on_message_create
 {
     my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     $callbacks->{'on_message_create'}->($hash->{'d'}) if exists $callbacks->{'on_message_create'};
 }
@@ -465,7 +445,7 @@ sub on_message_create
 sub on_webhooks_update
 {
     my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     $callbacks->{'on_webhooks_update'}->($hash->{'d'}) if exists $callbacks->{'on_webhooks_update'};
 }
@@ -473,7 +453,7 @@ sub on_webhooks_update
 sub on_typing_start
 {
     my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     $callbacks->{'on_typing_start'}->($hash->{'d'}) if exists $callbacks->{'on_typing_start'};
 }
@@ -482,7 +462,7 @@ sub on_typing_start
 sub on_guild_create
 {
     my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->{'callbacks'};
+    my $callbacks = $self->callbacks;
 
     $callbacks->{'on_guild_create'}->($hash->{'d'}) if exists $callbacks->{'on_guild_create'};
 }
@@ -491,7 +471,7 @@ sub on_invalid_session
 {
     my ($self, $tx, $hash) = @_;
 
-    $self->{'allow_resume'} = 0; # Have to establish a new session for this.
+    $self->allow_resume(0); # Have to establish a new session for this.
     gw_disconnect($self, "Invalid Session.");
 }
 
@@ -504,22 +484,20 @@ sub on_hello
     $self->{'heartbeat_loop'} = Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
         sub {
             my $op = 1;
-            my $d = $self->{'s'};
-            say localtime(time) . " OP 1 SEQ " . $self->{'s'} . " HEARTBEAT" if $self->{'verbose'};
-            $self->{'heartbeat_check'}++;
+            my $d = $self->s;
+            say localtime(time) . " OP 1 SEQ " . $self->s . " HEARTBEAT" if $self->verbose;
+            $self->heartbeat_check($self->heartbeat_check+1);
             send_op($self, $op, $d);
         }
     );
-
-
 }
 
 sub on_heartbeat_ack
 {
     my ($self, $tx, $hash) = @_;
 
-    say localtime(time) . " OP 11 SEQ " . $self->{'s'} . " HEARTBEAT ACK" if $self->{'verbose'};
-    $self->{'heartbeat_check'}--;
+    say localtime(time) . " OP 11 SEQ " . $self->s . " HEARTBEAT ACK" if $self->verbose;
+    $self->heartbeat_check($self->heartbeat_check-1);
 }
 
 1;

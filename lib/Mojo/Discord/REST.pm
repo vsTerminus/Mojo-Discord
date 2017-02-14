@@ -2,49 +2,28 @@ package Mojo::Discord::REST;
 
 our $VERSION = '0.001';
 
-use v5.10;
-use warnings;
-use strict;
+use Mojo::Base -base;
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
 use Data::Dumper;
 
-sub new
+has ['token', 'name', 'url', 'version'];
+has base_url    => 'https://discordapp.com/api';
+has agent       => sub { $_[0]->name . ' (' . $_[0]->url . ',' . $_[0]->version . ')' };
+has ua          => sub { Mojo::UserAgent->new };
+
+# Custom Constructor to set transactor name and insert token into every request
+sub new 
 {
-    my ($class, %params) = @_;
-    my $self = {};
+    my $self = shift->SUPER::new(@_);
 
-    die("Mojo::Discord::REST requires a Token.") unless defined $params{'token'};
-    die("Mojo::Discord::REST requires an application name.") unless defined $params{'name'};
-    die("Mojo::Discord::REST requires an application URL.") unless defined $params{'url'};
-    die("Mojo::Discord::REST requires an application version.") unless defined $params{'version'};
-
-    # Store the token, application name, url, and version
-    $self->{'token'}    = $params{'token'};
-
-    
-    # API Vars - Will need to be updated if the API changes
-    $self->{'base_url'}     = 'https://discordapp.com/api';
-    $self->{'name'}         = $params{'name'};
-    $self->{'url'}          = $params{'url'};
-    $self->{'version'}      = $params{'version'};
-    
-    # Other vars
-    $self->{'agent'}        = $self->{'name'} . ' (' . $self->{'url'} . ',' . $self->{'version'} . ')';
-
-    my $ua = Mojo::UserAgent->new;
-    $ua->transactor->name($self->{'agent'});
-
-    # Make sure the token is added to every request automatically.
-    $ua->on(start => sub {
+    $self->ua->transactor->name($self->agent);
+    $self->ua->on(start => sub {
         my ($ua, $tx) = @_;
-        $tx->req->headers->authorization("Bot " . $self->{'token'});
+        $tx->req->headers->authorization("Bot " . $self->token);
     });
 
-    $self->{'ua'} = $ua;
-
-    bless $self, $class;
     return $self;
 }
 
@@ -226,9 +205,9 @@ sub get_guild_webhooks
 
     die("get_guild_webhooks requires a guild ID") unless (defined $guild);
 
-    my $url = $self->{'base_url'} . "/guilds/$guild/webhooks";
+    my $url = $self->base_url . "/guilds/$guild/webhooks";
 
-    $self->{'ua'}->get($url => sub
+    $self->ua->get($url => sub
     {
         my ($ua, $tx) = @_;
 
