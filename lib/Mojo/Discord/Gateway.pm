@@ -211,50 +211,46 @@ sub gw_connect
     $url .= "?v=" . $self->{'gateway_version'} . "&encoding=" . $self->{'gateway_encoding'};
     say localtime(time) . ' Connecting to ' . $url if $self->{'verbose'};
 
-#    do { 
-
-        $ua->websocket($url => sub {
-            my ($ua, $tx) = @_;
+    $ua->websocket($url => sub {
+        my ($ua, $tx) = @_;
     
-            unless ($tx->is_websocket)
-            {
-                $self->on_finish(-1, 'Websocket Handshake Failed');
-#                $self->{'tx'} = undef;
-#                say localtime(time) . ' WebSocket handshake failed!';
-                return;
-            }
+        unless ($tx->is_websocket)
+        {
+            $self->on_finish(-1, 'Websocket Handshake Failed');
+#            $self->{'tx'} = undef;
+#            say localtime(time) . ' WebSocket handshake failed!';
+            return;
+        }
     
-            say localtime(time) . ' WebSocket Connection Established.' if $self->{'verbose'};
-            $self->{'heartbeat_check'} = 0; # Always make sure this is set to 0 on a new connection.
+        say localtime(time) . ' WebSocket Connection Established.' if $self->{'verbose'};
+        $self->{'heartbeat_check'} = 0; # Always make sure this is set to 0 on a new connection.
     
-            $self->{'tx'} = $tx;
+        $self->{'tx'} = $tx;
     
-            # If this is a new connection, send OP 2 IDENTIFY
-            # If we are reconnecting, send OP 6 RESUME
-            (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
+        # If this is a new connection, send OP 2 IDENTIFY
+        # If we are reconnecting, send OP 6 RESUME
+        (defined $reconnect and $reconnect and $self->{'allow_resume'}) ? send_resume($self, $tx) : send_ident($self, $tx);
     
-            # Reset the state of allow_resume now that we have reconnected.
-            $self->{'allow_resume'} = 1;
+        # Reset the state of allow_resume now that we have reconnected.
+        $self->{'allow_resume'} = 1;
     
-            # This should fire if the websocket closes for any reason.
-            $tx->on(finish => sub {
-                my ($tx, $code, $reason) = @_;
-                $self->on_finish($tx, $code, $reason);
-            }); 
+        # This should fire if the websocket closes for any reason.
+        $tx->on(finish => sub {
+            my ($tx, $code, $reason) = @_;
+            $self->on_finish($tx, $code, $reason);
+        }); 
     
-            $tx->on(json => sub {
-                my ($tx, $msg) = @_;
-                $self->on_json($tx, $msg);
-            });
-    
-            # This is the main loop - It handles all incoming messages from the server.
-            $tx->on(message => sub {
-                my ($tx, $msg) = @_;
-                $self->on_message($tx, $msg);
-            });        
+        $tx->on(json => sub {
+            my ($tx, $msg) = @_;
+            $self->on_json($tx, $msg);
         });
-
-#    } while ( $reconnect and !defined $self->{'tx'} );
+    
+        # This is the main loop - It handles all incoming messages from the server.
+        $tx->on(message => sub {
+            my ($tx, $msg) = @_;
+            $self->on_message($tx, $msg);
+        });        
+    });
 }
 
 # For manually disconnecting the connection
@@ -281,23 +277,29 @@ sub on_finish
 
     if ( !defined $tx )
     {
-        say localtime(time) . " (on_finish) \$tx is not defined.";
+        say localtime(time) . " (on_finish) \$tx is unexpectedly undefined.";
         die("\$tx is not defined. Cannot recover automatically.");
     }
 
     # Remove the heartbeat timer loop
     # The problem seems to be removing this if $tx goes away on its own.
     # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
+    if ( !defined $self->{'heartbeat_loop'} )
+    {
+        say localtime(time) . " (on_finish) Heartbeat Loop variable is unexpectedly undefined.";
+        die("Unable to remove Heartbeat Timer Loop. Cannot recover automatically.");
+    }
     say localtime(time) . " Removing Heartbeat Timer" if $self->{'verbose'};
     Mojo::IOLoop->remove($self->{'heartbeat_loop'});
     undef $self->{'heartbeat_loop'};
 
-    #$tx->finish;
-    undef $tx;
-    undef $self->{'tx'};
 
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
+    
+    #$tx->finish;
+    undef $tx;
+    undef $self->{'tx'};
 
     # Block reconnect for specific codes.
     $self->{'allow_resume'} = 0 if exists $no_resume{$code};
@@ -310,12 +312,12 @@ sub on_finish
         if ( $self->{'allow_resume'} )
         {
             say localtime(time) . " Reconnecting and resuming previous session in 30 seconds..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(15 => sub { $self->gw_connect($self->gateway(), 1) });
+            Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
             say localtime(time) . " Reconnecting and starting a new session in 30 seconds..." if $self->{'verbose'};
-            Mojo::IOLoop->timer(15 => sub { $self->gw_connect($self->gateway()) });
+            Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway()) });
         }
     }
     else
