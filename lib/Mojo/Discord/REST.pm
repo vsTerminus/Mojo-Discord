@@ -1,11 +1,13 @@
 package Mojo::Discord::REST;
 
+our $VERSION = '0.001';
+
 use v5.10;
 use warnings;
 use strict;
 
 use Mojo::UserAgent;
-use MIME::Base64;
+use Mojo::Util qw(b64_encode);
 use Data::Dumper;
 
 sub new
@@ -159,7 +161,7 @@ sub create_webhook
     {
         open(IMAGE, $avatar_file);
         my $raw_string = do{ local $/ = undef; <IMAGE>; };
-        $base64 = encode_base64( $raw_string );
+        $base64 = b64_encode( $raw_string );
         close(IMAGE);
     }
     # else - no big deal, it's optional.
