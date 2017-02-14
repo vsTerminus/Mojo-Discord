@@ -51,8 +51,8 @@ sub send_message
         };
     }
 
-    my $post_url = $self->{'base_url'} . "/channels/$dest/messages";
-    $self->{'ua'}->post($post_url => {Accept => '*/*'} => json => $json => sub
+    my $post_url = $self->base_url . "/channels/$dest/messages";
+    $self->ua->post($post_url => {Accept => '*/*'} => json => $json => sub
     {
         my ($ua, $tx) = @_;
 
@@ -66,8 +66,8 @@ sub get_user
 {
     my ($self, $id, $callback) = @_;
     
-    my $url = $self->{'base_url'} . "/users/$id";
-    $self->{'ua'}->get($url => sub 
+    my $url = $self->base_url . "/users/$id";
+    $self->ua->get($url => sub 
     {
         my ($ua, $tx) = @_;
        
@@ -81,9 +81,8 @@ sub leave_guild
 {
     my ($self, $user, $guild, $callback) = @_;
     
-    my $url = $self->{'base_url'} . "/users/$user/guilds/$guild";
-    say "URL: $url";
-    $self->{'ua'}->delete($url => sub {
+    my $url = $self->base_url . "/users/$user/guilds/$guild";
+    $self->ua->delete($url => sub {
         my ($ua, $tx) = @_;
         $callback->($tx->res->body) if defined $callback;
     });
@@ -93,11 +92,9 @@ sub get_guilds
 {
     my ($self, $user, $callback) = @_;
 
-    my $url = $self->{'base_url'} . "/users/$user/guilds";
+    my $url = $self->base_url . "/users/$user/guilds";
 
-    say "URL: $url";
-
-    return $self->{'ua'}->get($url => sub 
+    return $self->ua->get($url => sub 
     {
         my ($ua, $tx) = @_;
         $callback->($tx->res->json) if defined $callback;
@@ -109,9 +106,9 @@ sub start_typing
 {
     my ($self, $dest, $callback) = @_;
 
-    my $typing_url = $self->{'base_url'} . "/channels/$dest/typing";
+    my $typing_url = $self->base_url . "/channels/$dest/typing";
 
-    $self->{'ua'}->post($typing_url, sub 
+    $self->ua->post($typing_url, sub 
     { 
         my ($ua, $tx) = @_;
         $callback->($tx->res->body) if defined $callback;
@@ -153,8 +150,8 @@ sub create_webhook
     $json->{'avatar'} = "data:image/$type;base64," . $base64 if defined $base64;
 
     # Next, call the endpoint
-    my $url = $self->{'base_url'} . "/channels/$channel/webhooks";
-    $self->{'ua'}->post($url => json => $json => sub
+    my $url = $self->base_url . "/channels/$channel/webhooks";
+    $self->ua->post($url => json => $json => sub
     {
         my ($ua, $tx) = @_;
         $callback->($tx->res->json);# if defined $callback;
@@ -167,7 +164,7 @@ sub send_webhook
 
     my $id = $hook->{'id'};
     my $token = $hook->{'token'};
-    my $url = $self->{'base_url'} . "/webhooks/$id/$token";
+    my $url = $self->base_url . "/webhooks/$id/$token";
 
     if ( ref $params ne ref {} )
     {
@@ -175,7 +172,7 @@ sub send_webhook
         $params = {'content' => $params};
     }
 
-    $self->{'ua'}->post($url => json => $params => sub
+    $self->ua->post($url => json => $params => sub
     {
         my ($ua, $tx) = @_;
 
@@ -189,9 +186,9 @@ sub get_channel_webhooks
 
     die("get_channel_webhooks requires a channel ID") unless (defined $channel);
 
-    my $url = $self->{'base_url'} . "/channels/$channel/webhooks";
+    my $url = $self->base_url . "/channels/$channel/webhooks";
 
-    $self->{'ua'}->get($url => sub
+    $self->ua->get($url => sub
     {
         my ($ua, $tx) = @_;
 

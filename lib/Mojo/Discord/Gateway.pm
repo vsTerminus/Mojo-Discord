@@ -69,7 +69,8 @@ my %no_resume = (
 
 has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
 has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
-has ['heartbeat_check', 's']; # Couple things used to maintain connection
+has ['s', 'websocket_url', 'tx'];
+has ['heartbeat_interval', 'heartbeat_loop'];
 has base_url            => 'https://discordapp.com/api';
 has gateway_url         => sub { shift->base_url . '/gateway' };
 has gateway_version     => 6;
@@ -128,7 +129,7 @@ sub gateway
     my $tx = $ua->get($url);    # Fetch the Gateway WS URL
 
     # Store the URL in $self
-    $self->{'websocket_url'} = $tx->res->json->{'url'};
+    $self->websocket_url($tx->res->json->{'url'});
 
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
 }
@@ -140,7 +141,7 @@ sub send_op
 {
     my ($self, $op, $d, $s, $t) = @_;
 
-    my $tx = $self->{'tx'};
+    my $tx = $self->tx;
 
     if ( !defined $tx ) 
     {
@@ -205,7 +206,7 @@ sub gw_connect
         say localtime(time) . ' WebSocket Connection Established.' if $self->verbose;
         $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
     
-        $self->{'tx'} = $tx;
+        $self->tx($tx);
     
         # If this is a new connection, send OP 2 IDENTIFY
         # If we are reconnecting, send OP 6 RESUME
@@ -264,14 +265,14 @@ sub on_finish
     # Remove the heartbeat timer loop
     # The problem seems to be removing this if $tx goes away on its own.
     # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
-    if ( !defined $self->{'heartbeat_loop'})
+    if ( !defined $self->heartbeat_loop)
     {
         say localtime(time) . " (on_finish) Heartbeat Loop variable is unexpectedly undefined.";
         die("Unable to remove Heartbeat Timer Loop. Cannot recover automatically.");
     }
     say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
-    Mojo::IOLoop->remove($self->{'heartbeat_loop'});
-    undef $self->{'heartbeat_loop'};
+    Mojo::IOLoop->remove($self->heartbeat_loop);
+    undef $self->heartbeat_loop;
 
 
     # Send the code and reason to the on_finish callback, if the user defined one.
@@ -356,7 +357,7 @@ sub handle_event
 
     say localtime(time) . " " . $op_msg if ($self->verbose);
             
-    $self->{'s'} = $s if defined $s;    # Update the latest Sequence Number.
+    $self->s($s) if defined $s;    # Update the latest Sequence Number.
 
     # Call the relevant handler
     if ( defined $t and exists $handlers{$op}{$t} )
@@ -480,8 +481,8 @@ sub on_hello
     my ($self, $tx, $hash) = @_;
 
     # The Hello packet gives us our heartbeat interval, so we can start sending those.
-    $self->{'heartbeat_interval'} = $hash->{'d'}{'heartbeat_interval'} / 1000;
-    $self->{'heartbeat_loop'} = Mojo::IOLoop->recurring( $self->{'heartbeat_interval'},
+    $self->heartbeat_interval( $hash->{'d'}{'heartbeat_interval'} / 1000 );
+    $self->heartbeat_loop( Mojo::IOLoop->recurring( $self->heartbeat_interval,
         sub {
             my $op = 1;
             my $d = $self->s;
@@ -489,7 +490,7 @@ sub on_hello
             $self->heartbeat_check($self->heartbeat_check+1);
             send_op($self, $op, $d);
         }
-    );
+    ));
 }
 
 sub on_heartbeat_ack
