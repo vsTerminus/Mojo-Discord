@@ -1,4 +1,4 @@
-package Net::Discord::Auth;
+package Mojo::Discord::Auth;
 
 use v5.10;
 use warnings;
@@ -19,12 +19,12 @@ sub new
 {
     my ($class, %params) = @_;
 
-    die("Net::Discord::Auth requires an Authorization Code or Refresh Token.") unless defined $params{'code'} or defined $params{'refresh_token'};
-    die("Net::Discord::Auth requires an Application ID.") unless defined $params{'id'};
-    die("Net::Discord::Auth requires an Application Secret.") unless defined $params{'secret'};
-    die("Net::Discord::Auth requires an Application Name.") unless defined $params{'name'};
-    die("Net::Discord::Auth requires an Application URL.") unless defined $params{'url'};
-    die("Net::Discord::Auth requires an Application Version.") unless defined $params{'version'};
+    die("Mojo::Discord::Auth requires an Authorization Code or Refresh Token.") unless defined $params{'code'} or defined $params{'refresh_token'};
+    die("Mojo::Discord::Auth requires an Application ID.") unless defined $params{'id'};
+    die("Mojo::Discord::Auth requires an Application Secret.") unless defined $params{'secret'};
+    die("Mojo::Discord::Auth requires an Application Name.") unless defined $params{'name'};
+    die("Mojo::Discord::Auth requires an Application URL.") unless defined $params{'url'};
+    die("Mojo::Discord::Auth requires an Application Version.") unless defined $params{'version'};
 
     my $self = {
         'app' => {

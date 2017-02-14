@@ -1,4 +1,4 @@
-package Net::Discord::Gateway;
+package Mojo::Discord::Gateway;
 
 use v5.10;
 use warnings;
@@ -73,9 +73,9 @@ sub new
     my ($class, %params) = @_;
     my $self = {};
 
-    die("Net::Discord::Gateway requires an application name.") unless defined $params{'name'};
-    die("Net::Discord::Gateway requires an application URL.") unless defined $params{'url'};
-    die("Net::Discord::Gateway requires an application version.") unless defined $params{'version'};
+    die("Mojo::Discord::Gateway requires an application name.") unless defined $params{'name'};
+    die("Mojo::Discord::Gateway requires an application URL.") unless defined $params{'url'};
+    die("Mojo::Discord::Gateway requires an application version.") unless defined $params{'version'};
 
     # Store the name, url, version, and callbacks
     $self->{'token'}            = $params{'token'};

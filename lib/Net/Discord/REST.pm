@@ -1,4 +1,4 @@
-package Net::Discord::REST;
+package Mojo::Discord::REST;
 
 use v5.10;
 use warnings;
@@ -13,10 +13,10 @@ sub new
     my ($class, %params) = @_;
     my $self = {};
 
-    die("Net::Discord::REST requires a Token.") unless defined $params{'token'};
-    die("Net::Discord::REST requires an application name.") unless defined $params{'name'};
-    die("Net::Discord::REST requires an application URL.") unless defined $params{'url'};
-    die("Net::Discord::REST requires an application version.") unless defined $params{'version'};
+    die("Mojo::Discord::REST requires a Token.") unless defined $params{'token'};
+    die("Mojo::Discord::REST requires an application name.") unless defined $params{'name'};
+    die("Mojo::Discord::REST requires an application URL.") unless defined $params{'url'};
+    die("Mojo::Discord::REST requires an application version.") unless defined $params{'version'};
 
     # Store the token, application name, url, and version
     $self->{'token'}    = $params{'token'};
@@ -60,7 +60,7 @@ sub send_message
     }
     elsif ( ref $param eq ref [] )
     {
-        say localtime(time) . "Net::Discord::REST->send_message Received array. Expected hashref or string.";
+        say localtime(time) . "Mojo::Discord::REST->send_message Received array. Expected hashref or string.";
         return -1;
     }
     else    # Scalar - Simple string message. Build a basic json object to send.

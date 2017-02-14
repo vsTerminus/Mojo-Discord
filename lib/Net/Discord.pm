@@ -1,11 +1,11 @@
-package Net::Discord;
+package Mojo::Discord;
 
 use v5.10;
 use warnings;
 use strict;
 
-use Net::Discord::Gateway;
-use Net::Discord::REST;
+use Mojo::Discord::Gateway;
+use Mojo::Discord::REST;
 use Data::Dumper;
 
 sub new
@@ -13,10 +13,10 @@ sub new
     my ($class, %params) = @_;
     my $self = {};
 
-    die("Net::Discord::REST requires a Token.") unless defined $params{'token'};
-    die("Net::Discord::REST requires an application name.") unless defined $params{'name'};
-    die("Net::Discord::REST requires an application URL.") unless defined $params{'url'};
-    die("Net::Discord::REST requires an application version.") unless defined $params{'version'};
+    die("Mojo::Discord::REST requires a Token.") unless defined $params{'token'};
+    die("Mojo::Discord::REST requires an application name.") unless defined $params{'name'};
+    die("Mojo::Discord::REST requires an application URL.") unless defined $params{'url'};
+    die("Mojo::Discord::REST requires an application version.") unless defined $params{'version'};
 
     # Store the token, application name, url, and version
     $self->{'token'}        = $params{'token'};
@@ -35,8 +35,8 @@ sub new
     $self->{'base_url'}     = 'https://discordapp.com/api';
 
     # Create the Gateway and REST objects
-    my $gw                  = Net::Discord::Gateway->new(%{$self});
-    my $rest                = Net::Discord::REST->new(%{$self});
+    my $gw                  = Mojo::Discord::Gateway->new(%{$self});
+    my $rest                = Mojo::Discord::REST->new(%{$self});
 
     $self->{'gw'}           = $gw;
     $self->{'rest'}         = $rest;
