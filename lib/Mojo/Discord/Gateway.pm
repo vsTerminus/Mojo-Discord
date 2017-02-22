@@ -272,7 +272,7 @@ sub on_finish
     }
     say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
     Mojo::IOLoop->remove($self->heartbeat_loop);
-    undef $self->heartbeat_loop;
+    undef $self->{'heartbeat_loop'};
 
 
     # Send the code and reason to the on_finish callback, if the user defined one.
@@ -280,7 +280,7 @@ sub on_finish
     
     #$tx->finish;
     undef $tx;
-    undef $self->tx;
+    $self->tx(undef);
 
     # Block reconnect for specific codes.
     $self->allow_resume(0) if exists $no_resume{$code};
