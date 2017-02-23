@@ -12,16 +12,10 @@ use Encode::Guess;
 use Data::Dumper;
 
 my %handlers = (
-    '0' => { 'MESSAGE_CREATE'   => { func => \&on_message_create  },
-             'READY'            => { func => \&on_ready           },
-             'GUILD_CREATE'     => { func => \&on_guild_create    },
-             'WEBHOOKS_UPDATE'  => { func => \&on_webhooks_update },
-             'TYPING_START'     => { func => \&on_typing_start    },
-           },
-
-    '9'                         => { func => \&on_invalid_session  },
-    '10'                        => { func => \&on_hello },
-    '11'                        => { func => \&on_heartbeat_ack },
+    '0'     => { func => \&on_dispatch },
+    '9'     => { func => \&on_invalid_session  },
+    '10'    => { func => \&on_hello },
+    '11'    => { func => \&on_heartbeat_ack },
 );
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
@@ -307,11 +301,11 @@ sub on_finish
     }
 }
 
-# Not to be confused with on_create_message, this one handles the Websocket Event, not the Discord Gateway Event.
+# This one handles the Websocket Event, not the Discord Gateway Event.
 # on_json and on_message both receive the same events, but on_json gets nothing if the event is compressed
 # So we only handle uncompressed events, letting on_message handle the compressed ones.
 # Reason being, Compress::Zlib doesn't like wide chars in the uncompress call, but the on_json event handles them fine.
-sub on_message 
+sub on_message
 {
     my ($self, $tx, $msg) = @_;
 
@@ -360,11 +354,7 @@ sub handle_event
     $self->s($s) if defined $s;    # Update the latest Sequence Number.
 
     # Call the relevant handler
-    if ( defined $t and exists $handlers{$op}{$t} )
-    {
-        $handlers{$op}{$t}->{'func'}->($self, $tx, $hash);    # Call the handler function
-    }
-    elsif ( !defined $t and exists $handlers{$op} )
+    if ( exists $handlers{$op} )
     {
         $handlers{$op}->{'func'}->($self, $tx, $hash);
     }
@@ -372,6 +362,7 @@ sub handle_event
     else
     {
         #say Dumper($hash);
+        say localtime(time) . ": Unhandled Event: OP $op";
     }
 }
 
@@ -415,65 +406,30 @@ sub send_resume
     send_op($self, $op, $d);
 }
 
-# After sending an Ident packet we'll get this one in response.
-# It contains the heartbeat interval and other useful info the user may want to store.
-sub on_ready
+# Pass a hashref to a callback function if it exists
+sub callback
 {
-    my ($self, $tx, $hash) = @_;
+    my ($self, $event, $hash) = @_;
     my $callbacks = $self->callbacks;
 
-    # Store our user info just in case we need it later.
-    $self->id( $hash->{'d'}{'user'}{'id'} );
-    $self->username( $hash->{'d'}{'user'}{'username'} );
-    $self->avatar( $hash->{'d'}{'user'}{'avatar'} );
-    $self->discriminator( $hash->{'d'}{'user'}{'discriminator'} );
-    $self->session_id( $hash->{'d'}{'session_id'} );
-
-    $callbacks->{'on_ready'}->($hash->{'d'}) if exists $callbacks->{'on_ready'};
+    if ( exists $callbacks->{$event} )
+    {
+        $callbacks->{$event}->($hash);
+    }
+    else
+    {
+        say localtime(time) . ": No callback defined for event '$event'";
+    }
 }
 
-# Any messages sent will trigger this function.
-# There's not much to do other than call the user's own callback function and pass in the data section of the incoming structure.
-sub on_message_create
-{
-    my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->callbacks;
-
-    $callbacks->{'on_message_create'}->($hash->{'d'}) if exists $callbacks->{'on_message_create'};
-}
-
-# Any changes (add/delete/edit) to webhooks will trigger this. 
-sub on_webhooks_update
-{
-    my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->callbacks;
-
-    $callbacks->{'on_webhooks_update'}->($hash->{'d'}) if exists $callbacks->{'on_webhooks_update'};
-}
-
-sub on_typing_start
-{
-    my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->callbacks;
-
-    $callbacks->{'on_typing_start'}->($hash->{'d'}) if exists $callbacks->{'on_typing_start'};
-}
-
-# Pretty much just like on_message_create, this just passes info on to the callbacks.
-sub on_guild_create
-{
-    my ($self, $tx, $hash) = @_;
-    my $callbacks = $self->callbacks;
-
-    $callbacks->{'on_guild_create'}->($hash->{'d'}) if exists $callbacks->{'on_guild_create'};
-}
-
-sub on_invalid_session
+sub on_dispatch # OPCODE 0
 {
     my ($self, $tx, $hash) = @_;
 
-    $self->allow_resume(0); # Have to establish a new session for this.
-    gw_disconnect($self, "Invalid Session.");
+    my $t = $hash->{'t'};   # Type
+    my $d = $hash->{'d'};   # Data
+
+    $self->callback($t, $d);
 }
 
 sub on_hello
