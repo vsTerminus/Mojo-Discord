@@ -116,14 +116,13 @@ sub start_typing
 }
 
 # Create a new Webhook
+# Is non-blocking if $callback is defined
 sub create_webhook
 {
     my ($self, $channel, $params, $callback) = @_;
 
     my $name = $params->{'name'};
     my $avatar_file = $params->{'avatar'};
-
-    say ref $callback;
 
     # Check the name is valid (2-100 chars)
     if ( length $name < 2 or length $name > 100 )
@@ -151,11 +150,18 @@ sub create_webhook
 
     # Next, call the endpoint
     my $url = $self->base_url . "/channels/$channel/webhooks";
-    $self->ua->post($url => json => $json => sub
+    if ( defined $callback )
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->json);# if defined $callback;
-    });
+        $self->ua->post($url => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+            $callback->($tx->res->json);
+        });
+    }
+    else
+    {
+        return $self->ua->post($url => json => $json);
+    }
 }
 
 sub send_webhook
