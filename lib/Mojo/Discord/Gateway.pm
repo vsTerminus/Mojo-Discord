@@ -432,6 +432,18 @@ sub on_dispatch # OPCODE 0
     $self->callback($t, $d);
 }
 
+sub on_invalid_session
+{
+    my ($self, $tx, $hash) = @_;
+    my $t = $hash->{'t'};   # Type
+    my $d = $hash->{'d'};   # Data
+ 
+    $self->allow_resume(0); # Have to establish a new session for this.
+    gw_disconnect($self, "Invalid Session.");
+    $self->callback($t, $d);
+}
+
+
 sub on_hello
 {
     my ($self, $tx, $hash) = @_;
