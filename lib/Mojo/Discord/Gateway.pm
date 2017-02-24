@@ -418,7 +418,7 @@ sub callback
     }
     else
     {
-        say localtime(time) . ": No callback defined for event '$event'";
+        say localtime(time) . ": No callback defined for event '$event'" if $self->verbose;
     }
 }
 
