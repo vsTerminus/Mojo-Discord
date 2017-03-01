@@ -6,12 +6,14 @@ use Mojo::Base -base;
 
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
+use Mojo::Discord::Guild;
 use Data::Dumper;
 
 has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'callbacks'];
 has base_url    => 'https://discordapp.com/api';
 has gw          => sub { Mojo::Discord::Gateway->new(shift) };
 has rest        => sub { Mojo::Discord::REST->new(shift) };
+has ['guilds', 'channels'];
 
 sub init
 {
@@ -151,6 +153,22 @@ Note: This module implements only a subset of the available API calls. Additiona
 =head1 ATTRIBUTES
 
 L<Mojo::Discord> implements the following attributes
+
+=head2 init()
+
+Request the websocket Gateway URL and then establish a new websocket connection to that URL
+
+=head2 resume()
+
+Request the websocket Gateway URL and resume a previous Gateway connection.
+
+The only difference between this and init is that init sends an IDENT packet to start a new connection while this sends a RESUME packet with a sequence number which triggers Discord to re-send everything the bot missed since that sequence number.
+
+=head2 disconnect($reason)
+
+Close the websocket connection, optionally specify a reason as a string parameter.
+
+=head2
 
 =head1 BUGS
 

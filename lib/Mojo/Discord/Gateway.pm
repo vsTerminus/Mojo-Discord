@@ -7,15 +7,38 @@ use Mojo::Base -base;
 use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
 use Mojo::IOLoop;
+use Mojo::Discord::Guild;
 use Compress::Zlib;
 use Encode::Guess;
 use Data::Dumper;
 
 my %handlers = (
-    '0'     => { func => \&on_dispatch },
-    '9'     => { func => \&on_invalid_session  },
-    '10'    => { func => \&on_hello },
-    '11'    => { func => \&on_heartbeat_ack },
+    '0'     => \&on_dispatch,
+    '9'     => \&on_invalid_session,
+    '10'    => \&on_hello,
+    '11'    => \&on_heartbeat_ack,
+);
+
+my %dispatch = (
+    'GUILD_CREATE'          => \&dispatch_guild_create,
+    'GUILD_MODIFY'          => \&dispatch_guild_modify,
+    'GUILD_DELETE'          => \&dispatch_guild_delete,
+    'GUILD_MEMBER_ADD'      => \&dispatch_guild_member_add,
+    'GUILD_MEMBER_UPDATE'   => \&dispatch_guild_member_update,
+    'GUILD_MEMBER_REMOVE'   => \&dispatch_guild_member_remove,
+    'GUILD_MEMBERS_CHUNK'   => \&dispatch_guild_members_chunk,
+    'GUILD_EMOJIS_UPDATE'   => \&dispatch_guild_emojis_update,
+    'GUILD_ROLE_CREATE'     => \&dispatch_guild_role_create,
+    'GUILD_ROLE_UPDATE'     => \&dispatch_guild_role_update,
+    'GUILD_ROLE_DELETE'     => \&dispatch_guild_role_delete,
+    'USER_SETTINGS_UPDATE'  => \&dispatch_user_settings_update,
+    'USER_UPDATE'           => \&dispatch_user_update,
+    'CHANNEL_CREATE'        => \&dispatch_channel_create,
+    'CHANNEL_MODIFY'        => \&dispatch_channel_modify,
+    'CHANNEL_DELETE'        => \&dispatch_channel_delete,
+    'PRESENCE_UPDATE'       => \&dispatch_presence_update,
+    'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
+    # More as needed
 );
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
@@ -73,6 +96,8 @@ has agent               => sub { my $self = shift; $self->name . ' (' . $self->u
 has allow_resume        => 1;
 has heartbeat_check     => 0;
 has ua                  => sub { Mojo::UserAgent->new };
+has guilds              => sub { SUPER::guilds() };
+has channels            => sub { SUPER::channels() };
 
 # Custom Constructor to set transactor name and insert token into every request
 sub new 
@@ -329,7 +354,7 @@ sub on_message
             # Decode the JSON message into a perl structure
             my $hash = decode_json($uncompressed);
     
-            handle_event($self, $tx, $hash);
+            $self->handle_event($tx, $hash);
         }
     }
 }
@@ -341,7 +366,7 @@ sub on_json
 {
     my ($self, $tx, $msg) = @_;
 
-    handle_event($self, $tx, $msg) if defined $msg;
+    $self->handle_event($tx, $msg) if defined $msg;
 }
 
 # on_message and on_json are just going to pass perl hashes to this function, which will store the sequence number, optionally print some info, and then pass the data hash on to the callback function.
@@ -364,13 +389,27 @@ sub handle_event
     # Call the relevant handler
     if ( exists $handlers{$op} )
     {
-        $handlers{$op}->{'func'}->($self, $tx, $hash);
+        $handlers{$op}->($self, $tx, $hash);
     }
     # Else - unhandled event
     else
     {
         #say Dumper($hash);
         say localtime(time) . ": Unhandled Event: OP $op";
+    }
+}
+
+sub dispatch
+{
+    my ($self, $type, $data) = @_;
+
+    if ( exists $dispatch{$type} )
+    {
+        $dispatch{$type}->($self, $data);
+    }
+    else
+    {
+        say localtime(time) . ": Unhandled Dispatch Event: $type";
     }
 }
 
@@ -437,8 +476,94 @@ sub on_dispatch # OPCODE 0
     my $t = $hash->{'t'};   # Type
     my $d = $hash->{'d'};   # Data
 
+    # Track different information depending on the Dispatch Type
+    $self->dispatch($t, $d);
+
+    # Now send the same information to any user-specified Callbacks
     $self->callback($t, $d);
 }
+
+sub dispatch_guild_create
+{
+    my ($self, $hash) = @_;
+
+    my ($roles, $members, $channels, $presences, $emojis) = {};
+
+    # Now do Channels, Roles, Members, Presences, and Emojis
+    $roles->{$_->{'id'}}                = Mojo::Discord::Guild::Role->new($_)     foreach (@{$hash->{'roles'}});
+    $members->{$_->{'user'}{'id'}}      = Mojo::Discord::Guild::Member->new($_)   foreach (@{$hash->{'members'}});
+#    $channels->{$_->{'id'}}             = Mojo::Discord::Guild::Channel->new($_)  foreach (@{$hash->{'channels'}});
+    $presences->{$_->{'user'}{'id'}}    = Mojo::Discord::Guild::Presence->new($_) foreach (@{$hash->{'presences'}});
+    $emojis->{$_->{'id'}}               = Mojo::Discord::Guild::Emoji->new($_)    foreach (@{$hash->{'emojis'}});
+
+    # Channels requires an extra step
+    # Since messages only give you the channel ID we need an easy way to figure out which Guild that channel belongs to
+    # so we can look up roles and permissions and stuff without having to iterate through every guild entry every time.
+    # 
+    # Here we will build a "channels" hashref that links Channel IDs to Guild IDs.
+    # This way we can do just about any operation with only a channel ID to go on.
+    foreach my $channel (@{$hash->{'channels'}})
+    {
+        # Create the channel object
+        $channels->{$channel->{'id'}} = Mojo::Discord::Guild::Channel->new($channel);
+    
+        # Create a link from the channel ID to the Guild ID
+        $self->channels($channel->{'id'} => $hash->{'id'});
+    }
+
+    # Create the new Guild object
+    my $guild = Mojo::Discord::Guild->new(
+        'owner_id'                      => $hash->{'owner_id'},
+        'id'                            => $hash->{'id'},
+        'name'                          => $hash->{'name'},
+        'splash'                        => $hash->{'splash'},
+        'joined_at'                     => $hash->{'joined_at'},
+        'icon'                          => $hash->{'icon'},
+        'region'                        => $hash->{'region'},
+        'application_id'                => $hash->{'application_id'},
+        'unavailable'                   => $hash->{'unavailable'},
+        'member_count'                  => $hash->{'member_count'},
+        'afk_channel_id'                => $hash->{'afk_channel_id'},
+        'default_message_notifications' => $hash->{'default_message_notifications'},
+        'large'                         => $hash->{'large'},
+        'afk_timeout'                   => $hash->{'afk_timeout'},
+        'verification_level'            => $hash->{'verification_level'},
+        'mfa_level'                     => $hash->{'mfa_level'},
+        'roles'                         => $roles,
+        'members'                       => $members,
+        'channels'                      => $channels,
+        'presences'                     => $presences,
+        'emojis'                        => $emojis,
+    );
+
+    say "Added Guild: " . $guild->id . " -> " . $guild->name;
+    $self->guilds($guild->id => $guild);
+}
+sub dispatch_guild_modify
+{
+}
+
+sub dispatch_guild_delete
+{
+}
+
+# Start filling these in...
+sub dispatch_guild_member_add{}
+sub dispatch_guild_member_update{}
+sub dispatch_guild_member_remove{}
+sub dispatch_guild_members_chunk{}
+sub dispatch_guild_emojis_update{}
+sub dispatch_guild_role_create{}
+sub dispatch_guild_role_update{}
+sub dispatch_guild_role_delete{}
+sub dispatch_user_settings_update{}
+sub dispatch_user_update{}
+sub dispatch_channel_create{}
+sub dispatch_channel_modify{}
+sub dispatch_channel_delete{}
+sub dispatch_presence_update{}
+sub dispatch_webhooks_update{}
+
 
 sub on_invalid_session
 {
