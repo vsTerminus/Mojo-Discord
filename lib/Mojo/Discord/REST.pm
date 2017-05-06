@@ -14,7 +14,7 @@ has agent       => sub { $_[0]->name . ' (' . $_[0]->url . ',' . $_[0]->version 
 has ua          => sub { Mojo::UserAgent->new };
 
 # Custom Constructor to set transactor name and insert token into every request
-sub new 
+sub new
 {
     my $self = shift->SUPER::new(@_);
 
@@ -32,7 +32,7 @@ sub new
 sub send_message
 {
     my ($self, $dest, $param, $callback) = @_;
-  
+
     my $json;
 
     if ( ref $param eq ref {} ) # If hashref just pass it along as-is.
@@ -62,15 +62,81 @@ sub send_message
     });
 }
 
+sub edit_message
+{
+    my ($self, $dest, $msgid, $param, $callback) = @_;
+
+    my $json;
+
+    if ( ref $param eq ref {} ) # If hashref just pass it along as-is.
+    {
+        $json = $param;
+    }
+    elsif ( ref $param eq ref [] )
+    {
+        say localtime(time) . "Mojo::Discord::REST->send_message Received array. Expected hashref or string.";
+        return -1;
+    }
+    else    # Scalar - Simple string message. Build a basic json object to send.
+    {
+        $json = {
+            'content' => $param
+        };
+    }
+
+    my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
+    $self->ua->patch($post_url => {DNT => '1'} => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+
+        #say Dumper($tx->res->json);
+
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+sub delete_message
+{
+    my ($self, $dest, $msgid, $param, $callback) = @_;
+
+    my $json;
+
+    if ( ref $param eq ref {} ) # If hashref just pass it along as-is.
+    {
+        $json = $param;
+    }
+    elsif ( ref $param eq ref [] )
+    {
+        say localtime(time) . "Mojo::Discord::REST->send_message Received array. Expected hashref or string.";
+        return -1;
+    }
+    else    # Scalar - Simple string message. Build a basic json object to send.
+    {
+        $json = {
+            #'content' => $param
+        };
+    }
+
+    my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
+    $self->ua->delete($post_url => {DNT => '1'} => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+
+        #say Dumper($tx->res->json);
+
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
 sub get_user
 {
     my ($self, $id, $callback) = @_;
-    
+
     my $url = $self->base_url . "/users/$id";
-    $self->ua->get($url => sub 
+    $self->ua->get($url => sub
     {
         my ($ua, $tx) = @_;
-       
+
         #say Dumper($tx->res->json);
 
         $callback->($tx->res->json) if defined $callback;
@@ -80,7 +146,7 @@ sub get_user
 sub leave_guild
 {
     my ($self, $user, $guild, $callback) = @_;
-    
+
     my $url = $self->base_url . "/users/$user/guilds/$guild";
     $self->ua->delete($url => sub {
         my ($ua, $tx) = @_;
@@ -94,7 +160,7 @@ sub get_guilds
 
     my $url = $self->base_url . "/users/$user/guilds";
 
-    return $self->ua->get($url => sub 
+    return $self->ua->get($url => sub
     {
         my ($ua, $tx) = @_;
         $callback->($tx->res->json) if defined $callback;
@@ -108,8 +174,8 @@ sub start_typing
 
     my $typing_url = $self->base_url . "/channels/$dest/typing";
 
-    $self->ua->post($typing_url, sub 
-    { 
+    $self->ua->post($typing_url, sub
+    {
         my ($ua, $tx) = @_;
         $callback->($tx->res->body) if defined $callback;
     });
@@ -219,4 +285,3 @@ sub get_guild_webhooks
 }
 
 1;
-

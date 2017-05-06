@@ -27,7 +27,7 @@ sub init
 sub resume
 {
     my $self = shift;
-    
+
     # Get Gateway URL
     my $gw_url = $self->{'gw'}->gateway;
 
@@ -51,7 +51,7 @@ sub get_user
 sub get_guilds
 {
     my ($self, $user, $callback) = @_;
-    
+
     $self->rest->get_guilds($user, $callback);
 }
 
@@ -71,6 +71,21 @@ sub send_message
     $self->rest->send_message($channel, $message, $callback);
 }
 
+sub edit_message
+{
+    my ($self, $channel, $msgid, $message, $callback) = @_;
+
+    $self->rest->edit_message($channel, $msgid, $message, $callback);
+}
+
+sub delete_message
+{
+    my ($self, $channel, $msgid, $callback) = @_;
+
+    $self->rest->delete_message($channel, $msgid, $callback);
+}
+
+
 sub start_typing
 {
     my ($self, $channel, $callback) = @_;
@@ -81,7 +96,7 @@ sub start_typing
 sub status_update
 {
     my ($self, $params) = @_;
-    
+
     $self->gw->status_update($params);
 }
 
@@ -129,7 +144,7 @@ L<Mojo::Discord> is a L<Mojo::UserAgent> based L<Discord|https://discordapp.com>
 
 The Discord API is divided into three main parts: OAuth, REST, and Gateway. The main module is a wrapper that allows you to use the REST and Gateway modules together as part of a single object.
 
-All REST methods can be called with an optional trailing callback argument to run a non-blocking API Query. 
+All REST methods can be called with an optional trailing callback argument to run a non-blocking API Query.
 
 Note: This module implements only a subset of the available API calls. Additional features will be added as needed for my other projects, or possibly by request.
 
