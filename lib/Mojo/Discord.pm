@@ -2,22 +2,36 @@ package Mojo::Discord;
 
 our $VERSION = '0.001';
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
-use Mojo::Discord::Guild;
 use Data::Dumper;
 
-has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'callbacks'];
-has base_url    => 'https://discordapp.com/api';
-has gw          => sub { Mojo::Discord::Gateway->new(shift) };
-has rest        => sub { Mojo::Discord::REST->new(shift) };
-has ['guilds', 'channels'];
+use namespace::clean;
+
+has token       => ( is => 'rw' );
+has name        => ( is => 'rw' );
+has url         => ( is => 'rw' );
+has version     => ( is => 'rw' );
+has verbose     => ( is => 'rw' );
+has reconnect   => ( is => 'rw' );
+has callbacks   => ( is => 'rw' );
+has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
+has gw          => ( is => 'rw' );
+has rest        => ( is => 'rw' );
+has guilds      => ( is => 'rw' );
+has channels    => ( is => 'rw' );
 
 sub init
 {
     my $self = shift;
+
+    $self->guilds({});
+    $self->channels({});
+    $self->gw(Mojo::Discord::Gateway->new($self));
+    $self->rest(Mojo::Discord::REST->new($self));
 
     # Get Gateway URL
     my $gw_url = $self->gw->gateway;
