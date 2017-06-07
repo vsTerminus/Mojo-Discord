@@ -1,30 +1,39 @@
 package Mojo::Discord::REST;
-
+use feature 'say';
 our $VERSION = '0.001';
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
+
+extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
 use Data::Dumper;
 
-has ['token', 'name', 'url', 'version'];
-has base_url    => 'https://discordapp.com/api';
-has agent       => sub { $_[0]->name . ' (' . $_[0]->url . ',' . $_[0]->version . ')' };
-has ua          => sub { Mojo::UserAgent->new };
+use namespace::clean;
 
-# Custom Constructor to set transactor name and insert token into every request
-sub new
+has 'token'         => ( is => 'ro' );
+has 'name'          => ( is => 'rw', required => 1 );
+has 'url'           => ( is => 'rw', required => 1 );
+has 'version'       => ( is => 'ro', required => 1 );
+has 'base_url'      => ( is => 'ro', default => 'https://discordapp.com/api' );
+has 'agent'         => ( is => 'rw' );
+has 'ua'            => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
+
+sub BUILD
 {
-    my $self = shift->SUPER::new(@_);
+    my $self = shift;
+
+    $self->agent( $self->name . ' (' . $self->url . ',' . $self->version . ')' );
 
     $self->ua->transactor->name($self->agent);
+    $self->ua->inactivity_timeout(120);
+    $self->ua->connect_timeout(5);
     $self->ua->on(start => sub {
         my ($ua, $tx) = @_;
         $tx->req->headers->authorization("Bot " . $self->token);
     });
-
-    return $self;
 }
 
 # send_message will check if it is being passed a hashref or a string.
@@ -283,5 +292,7 @@ sub get_guild_webhooks
         $callback->($tx->res->json) if defined $callback;
     });
 }
+
+__PACKAGE__->meta->make_immutable;
 
 1;

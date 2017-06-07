@@ -1,8 +1,11 @@
 package Mojo::Discord::Gateway;
-
+use feature 'say';
 our $VERSION = '0.001';
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
+
+extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
@@ -12,113 +15,130 @@ use Compress::Zlib;
 use Encode::Guess;
 use Data::Dumper;
 
-my %handlers = (
-    '0'     => \&on_dispatch,
-    '9'     => \&on_invalid_session,
-    '10'    => \&on_hello,
-    '11'    => \&on_heartbeat_ack,
+use namespace::clean;
+
+has handlers => ( is => 'ro', default => sub {
+        {
+            '0'     => \&on_dispatch,
+            '9'     => \&on_invalid_session,
+            '10'    => \&on_hello,
+            '11'    => \&on_heartbeat_ack,
+        } 
+    }
 );
 
-my %dispatch = (
-    'GUILD_CREATE'          => \&dispatch_guild_create,
-    'GUILD_MODIFY'          => \&dispatch_guild_modify,
-    'GUILD_DELETE'          => \&dispatch_guild_delete,
-    'GUILD_MEMBER_ADD'      => \&dispatch_guild_member_add,
-    'GUILD_MEMBER_UPDATE'   => \&dispatch_guild_member_update,
-    'GUILD_MEMBER_REMOVE'   => \&dispatch_guild_member_remove,
-    'GUILD_MEMBERS_CHUNK'   => \&dispatch_guild_members_chunk,
-    'GUILD_EMOJIS_UPDATE'   => \&dispatch_guild_emojis_update,
-    'GUILD_ROLE_CREATE'     => \&dispatch_guild_role_create,
-    'GUILD_ROLE_UPDATE'     => \&dispatch_guild_role_update,
-    'GUILD_ROLE_DELETE'     => \&dispatch_guild_role_delete,
-    'USER_SETTINGS_UPDATE'  => \&dispatch_user_settings_update,
-    'USER_UPDATE'           => \&dispatch_user_update,
-    'CHANNEL_CREATE'        => \&dispatch_channel_create,
-    'CHANNEL_MODIFY'        => \&dispatch_channel_modify,
-    'CHANNEL_DELETE'        => \&dispatch_channel_delete,
-    'PRESENCE_UPDATE'       => \&dispatch_presence_update,
-    'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
-    # More as needed
-);
+has dispatches => ( is => 'ro', default => sub {
+    {
+        'GUILD_CREATE'          => \&dispatch_guild_create,
+        'GUILD_MODIFY'          => \&dispatch_guild_modify,
+        'GUILD_DELETE'          => \&dispatch_guild_delete,
+        'GUILD_MEMBER_ADD'      => \&dispatch_guild_member_add,
+        'GUILD_MEMBER_UPDATE'   => \&dispatch_guild_member_update,
+        'GUILD_MEMBER_REMOVE'   => \&dispatch_guild_member_remove,
+        'GUILD_MEMBERS_CHUNK'   => \&dispatch_guild_members_chunk,
+        'GUILD_EMOJIS_UPDATE'   => \&dispatch_guild_emojis_update,
+        'GUILD_ROLE_CREATE'     => \&dispatch_guild_role_create,
+        'GUILD_ROLE_UPDATE'     => \&dispatch_guild_role_update,
+        'GUILD_ROLE_DELETE'     => \&dispatch_guild_role_delete,
+        'USER_SETTINGS_UPDATE'  => \&dispatch_user_settings_update,
+        'USER_UPDATE'           => \&dispatch_user_update,
+        'CHANNEL_CREATE'        => \&dispatch_channel_create,
+        'CHANNEL_MODIFY'        => \&dispatch_channel_modify,
+        'CHANNEL_DELETE'        => \&dispatch_channel_delete,
+        'PRESENCE_UPDATE'       => \&dispatch_presence_update,
+        'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
+        # More as needed
+    }
+});
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
 # Also includes some Discord-specific codes from the Discord API Reference Docs (Starting at 4000)
-my %close = (
-    '1000'  => 'Normal Closure',
-    '1001'  => 'Going Away',
-    '1002'  => 'Protocol Error',
-    '1003'  => 'Unsupported Data',
-    '1005'  => 'No Status Received',
-    '1006'  => 'Abnormal Closure',
-    '1007'  => 'Invalid Frame Payload Data',
-    '1008'  => 'Policy Violation',
-    '1009'  => 'Message Too Big',
-    '1010'  => 'Mandatory Extension',
-    '1011'  => 'Internal Server Err',
-    '1012'  => 'Service Restart',
-    '1013'  => 'Try Again Later',
-    '1015'  => 'TLS Handshake',
-    '4000'  => 'Unknown Error',
-    '4001'  => 'Unknown Opcode',
-    '4002'  => 'Decode Error',
-    '4003'  => 'Not Authenticated',
-    '4004'  => 'Authentication Failed',
-    '4005'  => 'Already Authenticated',
-    '4007'  => 'Invalid Sequence',
-    '4008'  => 'Rate Limited',
-    '4009'  => 'Session Timeout',
-    '4010'  => 'Invalid Shard'
-);
+has close => ( is => 'ro', default => sub {
+    {
+        '1000'  => 'Normal Closure',
+        '1001'  => 'Going Away',
+        '1002'  => 'Protocol Error',
+        '1003'  => 'Unsupported Data',
+        '1005'  => 'No Status Received',
+        '1006'  => 'Abnormal Closure',
+        '1007'  => 'Invalid Frame Payload Data',
+        '1008'  => 'Policy Violation',
+        '1009'  => 'Message Too Big',
+        '1010'  => 'Mandatory Extension',
+        '1011'  => 'Internal Server Err',
+        '1012'  => 'Service Restart',
+        '1013'  => 'Try Again Later',
+        '1015'  => 'TLS Handshake',
+        '4000'  => 'Unknown Error',
+        '4001'  => 'Unknown Opcode',
+        '4002'  => 'Decode Error',
+        '4003'  => 'Not Authenticated',
+        '4004'  => 'Authentication Failed',
+        '4005'  => 'Already Authenticated',
+        '4007'  => 'Invalid Sequence',
+        '4008'  => 'Rate Limited',
+        '4009'  => 'Session Timeout',
+        '4010'  => 'Invalid Shard'
+    }
+});
 
 # Prevent sending a reconnect following certain codes.
 # This always requires a new session to be established if these codes are encountered.
 # Not sure if 1000 and 1001 require this, but I don't think it hurts to include them.
-my %no_resume = ( 
-    '1000' => 'Normal Closure',
-    '1001' => 'Going Away',
-    '1009' => 'Message Too Big',
-    '1011' => 'Internal Server Err',
-    '1012' => 'Service Restart',
-    '4007' => 'Invalid Sequence',
-    '4009' => 'Session Timeout',
-    '4010' => 'Invalid Shard'
-);
+has no_resume => ( is => 'ro', default => sub {
+    {
+        '1000' => 'Normal Closure',
+        '1001' => 'Going Away',
+        '1009' => 'Message Too Big',
+        '1011' => 'Internal Server Err',
+        '1012' => 'Service Restart',
+        '4007' => 'Invalid Sequence',
+        '4009' => 'Session Timeout',
+        '4010' => 'Invalid Shard'
+    } 
+});
 
-has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
-has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
-has ['s', 'websocket_url', 'tx'];
-has ['heartbeat_interval', 'heartbeat_loop'];
-has base_url            => 'https://discordapp.com/api';
-has gateway_url         => sub { shift->base_url . '/gateway' };
-has gateway_version     => 6;
-has gateway_encoding    => 'json';
-has agent               => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' };
-has allow_resume        => 1;
-has heartbeat_check     => 0;
-has ua                  => sub { Mojo::UserAgent->new };
-has ['guilds', 'channels'];
+has token               => ( is => 'ro' );
+has name                => ( is => 'rw', required => 1 );
+has url                 => ( is => 'rw', required => 1 );
+has version             => ( is => 'ro', required => 1 );
+has callbacks           => ( is => 'rw' );
+has verbose             => ( is => 'rw' );
+has reconnect           => ( is => 'rw' );
+has id                  => ( is => 'rw' );
+has username            => ( is => 'rw' );
+has avatar              => ( is => 'rw' );
+has discriminator       => ( is => 'rw' );
+has session_id          => ( is => 'rw' );
+has s                   => ( is => 'rw' );
+has websocket_url       => ( is => 'rw' );
+has tx                  => ( is => 'rw' );
+has heartbeat_interval  => ( is => 'rw' );
+has heartbeat_loop      => ( is => 'rw' );
+has heartbeat_check     => ( is => 'rw', default => 0 );
+has base_url            => ( is => 'ro', default => 'https://discordapp.com/api' );
+has gateway_url         => ( is => 'rw', default => sub { shift->base_url . '/gateway' });
+has gateway_version     => ( is => 'ro', default => 6 );
+has gateway_encoding    => ( is => 'ro', default => 'json' );
+has agent               => ( is => 'rw' );
+has allow_resume        => ( is => 'rw', default => 1 );
+has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
+has guilds              => ( is => 'rw' );
+has channels            => ( is => 'rw' );
 
-# Custom Constructor to set transactor name and insert token into every request
-sub new 
-{
-    my $self = shift->SUPER::new(@_);
-
+sub BUILD
+{ 
+    my $self = shift;
+    
+    $self->agent( $self->name . ' (' . $self->url . ',' . $self->version . ')' );
+    
     $self->ua->transactor->name($self->agent);
     $self->ua->inactivity_timeout(120);
     $self->ua->connect_timeout(5);
-
     $self->ua->on(start => sub {
-        my ($ua, $tx) = @_;
-        $tx->req->headers->authorization($self->token);
+       my ($ua, $tx) = @_;
+       $tx->req->headers->authorization($self->token);
     });
-     
-    return $self;
-}
-
-sub username
-{
-    my $self = shift;
-    return $self->username;
 }
 
 # This updates the client status
@@ -216,11 +236,11 @@ sub gw_connect
 
     # Add URL Params 
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
+
     say localtime(time) . ' Connecting to ' . $url if $self->verbose;
 
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
-    
         unless ($tx->is_websocket)
         {
             $self->on_finish(-1, 'Websocket Handshake Failed');
@@ -231,7 +251,6 @@ sub gw_connect
     
         say localtime(time) . ' WebSocket Connection Established.' if $self->verbose;
         $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
-    
         $self->tx($tx);
     
         # If this is a new connection, send OP 2 IDENTIFY
@@ -277,6 +296,7 @@ sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
     my $callbacks = $self->callbacks;
+    my %close = $self->close;
 
     $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
@@ -309,7 +329,8 @@ sub on_finish
     $self->tx(undef);
 
     # Block reconnect for specific codes.
-    $self->allow_resume(0) if exists $no_resume{$code};
+    my %no_resume = $self->no_resume;
+    #$self->allow_resume(0) if exists $no_resume->{$code};
 
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->reconnect )
@@ -386,9 +407,9 @@ sub handle_event
     $self->s($s) if defined $s;    # Update the latest Sequence Number.
 
     # Call the relevant handler
-    if ( exists $handlers{$op} )
+    if ( exists $self->handlers->{$op} )
     {
-        $handlers{$op}->($self, $tx, $hash);
+        $self->handlers->{$op}->($self, $tx, $hash);
     }
     # Else - unhandled event
     else
@@ -402,9 +423,9 @@ sub dispatch
 {
     my ($self, $type, $data) = @_;
 
-    if ( exists $dispatch{$type} )
+    if ( exists $self->dispatches->{$type} )
     {
-        $dispatch{$type}->($self, $data);
+        $self->dispatches->{$type}->($self, $data);
     }
     else
     {
@@ -458,7 +479,11 @@ sub callback
     my ($self, $event, $hash) = @_;
     my $callbacks = $self->callbacks;
 
-    if ( exists $callbacks->{$event} )
+    if ( !defined $event )
+    {
+        say localtime(time) . ": No event defined for callback";
+    }
+    elsif ( exists $callbacks->{$event} )
     {
         $callbacks->{$event}->($hash);
     }
@@ -601,5 +626,7 @@ sub on_heartbeat_ack
     say localtime(time) . " OP 11 SEQ " . $self->s . " HEARTBEAT ACK" if $self->verbose;
     $self->heartbeat_check($self->heartbeat_check-1);
 }
+
+__PACKAGE__->meta->make_immutable;
 
 1;

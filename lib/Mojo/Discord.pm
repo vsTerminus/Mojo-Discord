@@ -1,5 +1,5 @@
 package Mojo::Discord;
-
+use feature 'say';
 our $VERSION = '0.001';
 
 use Moo;
@@ -30,8 +30,25 @@ sub init
 
     $self->guilds({});
     $self->channels({});
-    $self->gw(Mojo::Discord::Gateway->new($self));
-    $self->rest(Mojo::Discord::REST->new($self));
+
+    $self->gw(Mojo::Discord::Gateway->new(
+        'token'         => $self->token,
+        'name'          => $self->name,
+        'url'           => $self->url,
+        'version'       => $self->version,
+        'verbose'       => $self->verbose,
+        'reconnect'     => $self->reconnect,
+        'callbacks'     => $self->callbacks,
+        'base_url'      => $self->base_url,
+    ));
+
+    $self->rest(Mojo::Discord::REST->new(
+        'token'         => $self->token,
+        'name'          => $self->name,
+        'url'           => $self->url,
+        'version'       => $self->version,
+        'verbose'       => $self->verbose,
+    ));
 
     # Get Gateway URL
     my $gw_url = $self->gw->gateway;
@@ -143,6 +160,8 @@ sub get_guild_webhooks
 
     $self->rest->get_guild_webhooks($guild, $callback);
 }
+
+__PACKAGE__->meta->make_immutable;
 
 1;
 
