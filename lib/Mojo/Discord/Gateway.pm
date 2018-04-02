@@ -10,7 +10,8 @@ extends 'Mojo::Discord';
 use Mojo::UserAgent;
 use Mojo::JSON qw(decode_json encode_json);
 use Mojo::IOLoop;
-#use Mojo::Discord::Guild;
+use Mojo::Discord::User;
+use Mojo::Discord::Guild;
 use Compress::Zlib;
 use Encode::Guess;
 use Data::Dumper;
@@ -127,8 +128,9 @@ has gateway_encoding    => ( is => 'ro', default => 'json' );
 has agent               => ( is => 'rw' );
 has allow_resume        => ( is => 'rw', default => 1 );
 has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
-has guilds              => ( is => 'rw' );
-has channels            => ( is => 'rw' );
+has guilds              => ( is => 'rw', default => sub { {} } );
+has channels            => ( is => 'rw', default => sub { {} } );
+has users               => ( is => 'rw', default => sub { {} } );
 
 sub BUILD
 { 
@@ -343,12 +345,12 @@ sub on_finish
 
         if ( $self->allow_resume )
         {
-            say localtime(time) . " Reconnecting and resuming previous session in 30 seconds..." if $self->verbose;
+            say localtime(time) . " Reconnecting and resuming previous session in 10 seconds..." if $self->verbose;
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
-            say localtime(time) . " Reconnecting and starting a new session in 30 seconds..." if $self->verbose;
+            say localtime(time) . " Reconnecting and starting a new session in 10 seconds..." if $self->verbose;
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway()) });
         }
     }
@@ -533,57 +535,95 @@ sub dispatch_guild_create
 {
     my ($self, $hash) = @_;
 
-    my ($roles, $members, $channels, $presences, $emojis) = {};
-
-    # Now do Channels, Roles, Members, Presences, and Emojis
-#    $roles->{$_->{'id'}}                = Mojo::Discord::Guild::Role->new($_)     foreach (@{$hash->{'roles'}});
-#    $members->{$_->{'user'}{'id'}}      = Mojo::Discord::Guild::Member->new($_)   foreach (@{$hash->{'members'}});
-#    $presences->{$_->{'user'}{'id'}}    = Mojo::Discord::Guild::Presence->new($_) foreach (@{$hash->{'presences'}});
-#    $emojis->{$_->{'id'}}               = Mojo::Discord::Guild::Emoji->new($_)    foreach (@{$hash->{'emojis'}});
-
-    # Channels requires an extra step
-    # Since messages only give you the channel ID we need an easy way to figure out which Guild that channel belongs to
-    # so we can look up roles and permissions and stuff without having to iterate through every guild entry every time.
-    # 
-    # Here we will build a "channels" hashref that links Channel IDs to Guild IDs.
-    # This way we can do just about any operation with only a channel ID to go on.
-#    foreach my $channel (@{$hash->{'channels'}})
-#    {
-        # Create the channel object
-#        $channels->{$channel->{'id'}} = Mojo::Discord::Guild::Channel->new($channel);
-    
-        # Create a link from the channel ID to the Guild ID
-#        $self->channels($channel->{'id'} => $hash->{'id'});
-#    }
-
     # Create the new Guild object
- #   my $guild = Mojo::Discord::Guild->new(
-#    my $guild = (
-#        'owner_id'                      => $hash->{'owner_id'},
-#        'id'                            => $hash->{'id'},
-#        'name'                          => $hash->{'name'},
-#        'splash'                        => $hash->{'splash'},
-#        'joined_at'                     => $hash->{'joined_at'},
-#        'icon'                          => $hash->{'icon'},
-#        'region'                        => $hash->{'region'},
-#        'application_id'                => $hash->{'application_id'},
-#        'unavailable'                   => $hash->{'unavailable'},
-#        'member_count'                  => $hash->{'member_count'},
-#        'afk_channel_id'                => $hash->{'afk_channel_id'},
-#        'default_message_notifications' => $hash->{'default_message_notifications'},
-#        'large'                         => $hash->{'large'},
-#        'afk_timeout'                   => $hash->{'afk_timeout'},
-#        'verification_level'            => $hash->{'verification_level'},
-#        'mfa_level'                     => $hash->{'mfa_level'},
+    # Don't define roles, members, channels, presences, or emojies initially.
+    my $guild = Mojo::Discord::Guild->new(
+        'owner_id'                      => $hash->{'owner_id'},
+        'id'                            => $hash->{'id'},
+        'name'                          => $hash->{'name'},
+        'splash'                        => $hash->{'splash'},
+        'joined_at'                     => $hash->{'joined_at'},
+        'icon'                          => $hash->{'icon'},
+        'region'                        => $hash->{'region'},
+        'application_id'                => $hash->{'application_id'},
+        'unavailable'                   => $hash->{'unavailable'},
+        'member_count'                  => $hash->{'member_count'},
+        'afk_channel_id'                => $hash->{'afk_channel_id'},
+        'default_message_notifications' => $hash->{'default_message_notifications'},
+        'large'                         => $hash->{'large'},
+        'afk_timeout'                   => $hash->{'afk_timeout'},
+        'verification_level'            => $hash->{'verification_level'},
+        'mfa_level'                     => $hash->{'mfa_level'},
 #        'roles'                         => $roles,
 #        'members'                       => $members,
 #        'channels'                      => $channels,
 #        'presences'                     => $presences,
 #        'emojis'                        => $emojis,
-#    );
+    );
+    
+    say "Added Guild: " . $guild->id . " -> " . $guild->name;
 
-#    say "Added Guild: " . $guild->id . " -> " . $guild->name;
-#    $self->guilds($guild->id => $guild);
+    # Now iterate through the remaining items and add them to the guild.
+    my ($roles, $members, $channels, $presences, $emojis) = {};
+
+    # Channels
+    foreach my $channel_hash (@{$hash->{'channels'}})
+    {
+        # Add the channel
+        my $channel = $guild->add_channel($channel_hash);
+   
+        # Channels requires an extra step
+        # Since messages only give you the channel ID we need an easy way to figure out which Guild that channel belongs to
+        # so we can look up roles and permissions and stuff without having to iterate through every guild entry every time.
+        # Here we will build a "channels" hashref that links Channel IDs to Guild IDs.
+        # This way we can do just about any operation with only a channel ID to go on.
+        # Create a link from the channel ID to the Guild ID
+        $self->channels->{$channel->id} = $guild->id;
+        
+        say "\tHas Channel: " . $channel->id . " -> " . $channel->name;
+    }
+
+    # Roles
+    foreach my $role_hash (@{$hash->{'roles'}})
+    {
+        my $role = $guild->add_role($role_hash);
+        say "\tHas Role: " . $role->id . " -> " . $role->name;
+    }
+
+    # Presences
+    foreach my $presence_hash (@{$hash->{'presences'}})
+    {
+        # Presences don't have an id, so we'll use the user ID as the presence ID.
+        $presence_hash->{'id'} = $presence_hash->{'user'}->{'id'};
+
+        my $presence = $guild->add_presence($presence_hash);
+        say "\tHas Presence: " . $presence->id . " -> " . $presence->status;
+    }
+
+    # Emojis
+    foreach my $emoji_hash (@{$hash->{'emojis'}})
+    {
+        my $emoji = $guild->add_emoji($emoji_hash);
+        say "\tHas Emoji: " . $emoji->id . " -> " . $emoji->name;
+    }
+
+    #print Dumper($hash->{'members'});
+
+    # Members
+    foreach my $member_hash (@{$hash->{'members'}})
+    {
+        # Like presences, there is no "member ID" so we'll use the user id instead.
+        $member_hash->{'id'} = $member_hash->{'user'}->{'id'};
+        my $member = $guild->add_member($member_hash);
+
+        # Now we also want to add the user, but this is not a property of the guild; It's a top level entity.
+        my $user_hash = $member_hash->{'user'};
+        my $user = $self->add_user($user_hash);
+        
+        say "\tHas Member: " . $member->id . " -> " . $user->username;
+    }
+
+    $self->guilds->{$guild->id} = $guild;
 #    $self->SUPER::guilds($self->guilds);
 }
 sub dispatch_guild_modify
@@ -611,6 +651,25 @@ sub dispatch_channel_delete{}
 sub dispatch_presence_update{}
 sub dispatch_webhooks_update{}
 
+# There is no dispatch event for this. Rather, discord makes you aware of new users
+# through various guild events. Any time we are made aware of a potentially new user
+# we should call this function.
+sub add_user
+{
+    my ($self, $args) = @_;
+
+    die("Cannot add a user without an ID.\nDied ") unless defined $args->{'id'};
+
+    my $id = $args->{'id'};
+    my $user = Mojo::Discord::User->new($args);
+
+    # Make the bot aware of this user.
+#    $self->users($id => $user);
+    $self->users->{$id} = $user;
+
+    # Return the new user object to the caller.
+    return $user;
+}
 
 sub on_invalid_session
 {

@@ -3,8 +3,6 @@ package Mojo::Discord::Guild::Channel;
 use Moo;
 use strictures 2;
 
-extends 'Mojo::Discord::Guild';
-
 has id                      => ( is => 'rw' );
 has last_message_id         => ( is => 'rw' );
 has position                => ( is => 'rw' );

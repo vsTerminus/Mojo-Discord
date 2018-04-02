@@ -3,8 +3,6 @@ package Mojo::Discord::Guild::Role;
 use Moo;
 use strictures 2;
 
-extends 'Mojo::Discord::Guild';
-
 has id              => ( is => 'rw' );
 has managed         => ( is => 'rw' );
 has mentionable     => ( is => 'rw' );

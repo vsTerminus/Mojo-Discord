@@ -78,7 +78,17 @@ sub get_user
 {
     my ($self, $id, $callback) = @_;
 
-    $self->rest->get_user($id, $callback);
+
+    if ( exists $self->gw->users->{$id} )
+    {
+        $callback ? $callback->( $self->gw->users->{$id} ) : return $self->gw->users->{$id};
+    }
+    else
+    {
+        # If we don't have the user stored already then use REST to look them up.
+        # todo, make this also return a User hash object instead of JSON.
+        $self->rest->get_user($id, $callback);
+    }
 }
 
 sub get_guilds
