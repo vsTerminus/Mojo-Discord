@@ -1,10 +1,20 @@
 package Mojo::Discord::Guild::Member;
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(id username discriminator avatar mute roles deaf nick joined_at);
+extends 'Mojo::Discord::Guild';
 
-has ['id', 'username', 'discriminator', 'avatar', 'mute', 'roles', 'deaf', 'nick', 'joined_at'];
+has id              => ( is => 'rw' );
+has username        => ( is => 'rw' );
+has discriminator   => ( is => 'rw' );
+has avatar          => ( is => 'rw' );
+has mute            => ( is => 'rw' );
+has roles           => ( is => 'rw' );
+has deaf            => ( is => 'rw' );
+has nick            => ( is => 'rw' );
+has joined_at       => ( is => 'rw' );
+
+__PACKAGE__->meta->make_immutable;
 
 1;

@@ -1,10 +1,16 @@
 package Mojo::Discord::Guild::Emoji;
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(id name require_colons managed roles);
+extends 'Mojo::Discord::Guild';
 
-has ['id', 'name', 'require_colons', 'managed', 'roles'];
+has id              => ( is => 'rw' );
+has name            => ( is => 'rw' );
+has require_colons  => ( is => 'rw' );
+has managed         => ( is => 'rw' );
+has roles           => ( is => 'rw' );
+
+__PACKAGE__->meta->make_immutable;
 
 1;

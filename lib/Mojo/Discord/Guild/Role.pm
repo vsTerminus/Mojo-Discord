@@ -1,10 +1,19 @@
 package Mojo::Discord::Guild::Role;
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(id managed mentionable permissions name position hoist color);
+extends 'Mojo::Discord::Guild';
 
-has ['id', 'managed', 'mentionable', 'permissions', 'name', 'position', 'hoist', 'color'];
+has id              => ( is => 'rw' );
+has managed         => ( is => 'rw' );
+has mentionable     => ( is => 'rw' );
+has permissions     => ( is => 'rw' );
+has name            => ( is => 'rw' );
+has position        => ( is => 'rw' );
+has hoist           => ( is => 'rw' );
+has color           => ( is => 'rw' );
+
+__PACKAGE__->meta->make_immutable;
 
 1;

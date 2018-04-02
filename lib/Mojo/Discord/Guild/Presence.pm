@@ -1,10 +1,15 @@
 package Mojo::Discord::Guild::Presence;
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
-use Exporter qw(import);
-our @EXPORT_OK = qw(id game user status);
+extents 'Mojo::Discord::Guild';
 
-has ['id', 'game', 'user', 'status'];
+has id      => ( is => 'rw' );
+has game    => ( is => 'rw' );
+has user    => ( is => 'rw' );
+has status  => ( is => 'rw' );
+
+__PACKAGE__->meta->make_immutable;
 
 1;

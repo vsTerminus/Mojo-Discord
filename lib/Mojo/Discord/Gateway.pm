@@ -29,6 +29,10 @@ has handlers => ( is => 'ro', default => sub {
 
 has dispatches => ( is => 'ro', default => sub {
     {
+        'TYPING_START'          => \&dispatch_typing_start,
+        'MESSAGE_CREATE'        => \&dispatch_message_create,
+        'MESSAGE_UPDATE'        => \&dispatch_message_update,
+        'MESSAGE_DELETE'        => \&dispatch_message_delete,
         'GUILD_CREATE'          => \&dispatch_guild_create,
         'GUILD_MODIFY'          => \&dispatch_guild_modify,
         'GUILD_DELETE'          => \&dispatch_guild_delete,
@@ -505,6 +509,24 @@ sub on_dispatch # OPCODE 0
 
     # Now send the same information to any user-specified Callbacks
     $self->callback($t, $d);
+}
+
+sub dispatch_typing_start
+{
+    
+}
+
+sub dispatch_message_create
+{
+    
+}
+
+sub dispatch_message_update
+{
+}
+
+sub dispatch_message_delete
+{
 }
 
 sub dispatch_guild_create
