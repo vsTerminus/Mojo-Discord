@@ -531,42 +531,69 @@ sub dispatch_message_delete
 {
 }
 
-sub dispatch_guild_create
+# Create the new Guild object and return it
+# Takes a Discord Guild hash
+# returns a Mojo::Discord::Guild object.
+sub _create_guild
 {
     my ($self, $hash) = @_;
 
-    # Create the new Guild object
-    # Don't define roles, members, channels, presences, or emojies initially.
+    # First create the top level attributes
+    my $guild = $self->_create_guild_top_level($hash);
+
+    # Now parse the substructures
+    $self->_create_guild_channels($guild, $hash);
+    $self->_create_guild_roles($guild, $hash);
+    $self->_create_guild_presences($guild, $hash);
+    $self->_create_guild_emojis($guild, $hash);
+    $self->_create_guild_members($guild, $hash);
+    # TO-DO: features and voice states
+
+    # Finally, return the new guild object.
+    return $guild;
+}
+
+# This just sets the top level attributes and returns the new object. Don't define roles, features, voice states, members, channels, presences, or emojies initially.
+sub _create_guild_top_level
+{
+    my ($self, $hash) = @_;
+
     my $guild = Mojo::Discord::Guild->new(
-        'owner_id'                      => $hash->{'owner_id'},
         'id'                            => $hash->{'id'},
         'name'                          => $hash->{'name'},
-        'splash'                        => $hash->{'splash'},
-        'joined_at'                     => $hash->{'joined_at'},
         'icon'                          => $hash->{'icon'},
+        'splash'                        => $hash->{'splash'},
+        'owner'                         => $hash->{'owner'},
+        'owner_id'                      => $hash->{'owner_id'},
         'region'                        => $hash->{'region'},
+        'afk_channel_id'                => $hash->{'afk_channel_id'},
+        'afk_timeout'                   => $hash->{'afk_timeout'},
+        'embed_enabled'                 => $hash->{'embed_enabled'},
+        'embed_channel_id'              => $hash->{'embed_channel_id'},
+        'verification_level'            => $hash->{'verification_level'},
+        'default_message_notifications' => $hash->{'default_message_notifications'},
+        'explicit_content_filter'       => $hash->{'explicit_content_filter'},
+        'mfa_level'                     => $hash->{'mfa_level'},
         'application_id'                => $hash->{'application_id'},
+        'widget_enabled'                => $hash->{'widget_enabled'},
+        'widget_channel_id'             => $hash->{'widget_channel_id'},
+        'system_channel_id'             => $hash->{'system_channel_id'},
+        'joined_at'                     => $hash->{'joined_at'},
+        'large'                         => $hash->{'large'},
         'unavailable'                   => $hash->{'unavailable'},
         'member_count'                  => $hash->{'member_count'},
-        'afk_channel_id'                => $hash->{'afk_channel_id'},
-        'default_message_notifications' => $hash->{'default_message_notifications'},
-        'large'                         => $hash->{'large'},
-        'afk_timeout'                   => $hash->{'afk_timeout'},
-        'verification_level'            => $hash->{'verification_level'},
-        'mfa_level'                     => $hash->{'mfa_level'},
-#        'roles'                         => $roles,
-#        'members'                       => $members,
-#        'channels'                      => $channels,
-#        'presences'                     => $presences,
-#        'emojis'                        => $emojis,
     );
-    
     say "Added Guild: " . $guild->id . " -> " . $guild->name;
 
-    # Now iterate through the remaining items and add them to the guild.
-    my ($roles, $members, $channels, $presences, $emojis) = {};
+    return $guild;
+}
 
-    # Channels
+# This sub adds the channels found in the discord guild hash to the specified guild.
+# Takes a Mojo::Discord::Guild object and a discord guild hash
+sub _create_guild_channels
+{
+    my ($self, $guild, $hash) = @_;
+
     foreach my $channel_hash (@{$hash->{'channels'}})
     {
         # Add the channel
@@ -582,15 +609,25 @@ sub dispatch_guild_create
         
         say "\tHas Channel: " . $channel->id . " -> " . $channel->name;
     }
+}
 
-    # Roles
+# Adds roles to a guild object
+# Takes a Mojo::Discord::Guild object and a discord guild perl hash.
+sub _create_guild_roles
+{
+    my ($self, $guild, $hash) = @_;
+
     foreach my $role_hash (@{$hash->{'roles'}})
     {
         my $role = $guild->add_role($role_hash);
         say "\tHas Role: " . $role->id . " -> " . $role->name;
     }
+}
 
-    # Presences
+sub _create_guild_presences
+{
+    my ($self, $guild, $hash) = @_;
+
     foreach my $presence_hash (@{$hash->{'presences'}})
     {
         # Presences don't have an id, so we'll use the user ID as the presence ID.
@@ -599,17 +636,23 @@ sub dispatch_guild_create
         my $presence = $guild->add_presence($presence_hash);
         say "\tHas Presence: " . $presence->id . " -> " . $presence->status;
     }
+}
 
-    # Emojis
+sub _create_guild_emojis
+{
+    my ($self, $guild, $hash) = @_;
+    
     foreach my $emoji_hash (@{$hash->{'emojis'}})
     {
         my $emoji = $guild->add_emoji($emoji_hash);
         say "\tHas Emoji: " . $emoji->id . " -> " . $emoji->name;
     }
+}
 
-    #print Dumper($hash->{'members'});
-
-    # Members
+sub _create_guild_members
+{
+    my ($self, $guild, $hash) = @_;
+    
     foreach my $member_hash (@{$hash->{'members'}})
     {
         # Like presences, there is no "member ID" so we'll use the user id instead.
@@ -622,12 +665,22 @@ sub dispatch_guild_create
         
         say "\tHas Member: " . $member->id . " -> " . $user->username;
     }
-
-    $self->guilds->{$guild->id} = $guild;
-#    $self->SUPER::guilds($self->guilds);
 }
+
+sub dispatch_guild_create
+{
+    my ($self, $hash) = @_;
+   
+    # Parse the hash and create a Mojo::Discord::Guild object
+    my $guild = $self->_create_guild($hash);
+
+    # Store it in our guilds hash.
+    $self->guilds->{$guild->id} = $guild;
+}
+
 sub dispatch_guild_modify
 {
+
 }
 
 sub dispatch_guild_delete
