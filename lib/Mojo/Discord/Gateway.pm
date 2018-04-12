@@ -35,7 +35,7 @@ has dispatches => ( is => 'ro', default => sub {
         'MESSAGE_UPDATE'        => \&dispatch_message_update,
         'MESSAGE_DELETE'        => \&dispatch_message_delete,
         'GUILD_CREATE'          => \&dispatch_guild_create,
-        'GUILD_MODIFY'          => \&dispatch_guild_modify,
+        'GUILD_UPDATE'          => \&dispatch_guild_update,
         'GUILD_DELETE'          => \&dispatch_guild_delete,
         'GUILD_MEMBER_ADD'      => \&dispatch_guild_member_add,
         'GUILD_MEMBER_UPDATE'   => \&dispatch_guild_member_update,
@@ -534,63 +534,49 @@ sub dispatch_message_delete
 # Create the new Guild object and return it
 # Takes a Discord Guild hash
 # returns a Mojo::Discord::Guild object.
+#
+# The _create_guild function doesn't actually do much work on its own.
+# It really just creates the new Guild object and passes it to _update_guild
+# to be populated.
 sub _create_guild
 {
     my ($self, $hash) = @_;
 
-    # First create the top level attributes
-    my $guild = $self->_create_guild_top_level($hash);
+    say "Joined a Guild:";
+    my $guild = Mojo::Discord::Guild->new();
+    $self->_update_guild($guild, $hash);
 
-    # Now parse the substructures
-    $self->_create_guild_channels($guild, $hash);
-    $self->_create_guild_roles($guild, $hash);
-    $self->_create_guild_presences($guild, $hash);
-    $self->_create_guild_emojis($guild, $hash);
-    $self->_create_guild_members($guild, $hash);
-    # TO-DO: features and voice states
-
-    # Finally, return the new guild object.
     return $guild;
 }
 
-# This just sets the top level attributes and returns the new object. Don't define roles, features, voice states, members, channels, presences, or emojies initially.
-sub _create_guild_top_level
+# Break out the parts of the provided hash from discord and
+# add/update the passed-in guild object with it.
+sub _update_guild
 {
-    my ($self, $hash) = @_;
+    my ($self, $guild, $hash) = @_;
 
-    my $guild = Mojo::Discord::Guild->new(
-        'id'                            => $hash->{'id'},
-        'name'                          => $hash->{'name'},
-        'icon'                          => $hash->{'icon'},
-        'splash'                        => $hash->{'splash'},
-        'owner'                         => $hash->{'owner'},
-        'owner_id'                      => $hash->{'owner_id'},
-        'region'                        => $hash->{'region'},
-        'afk_channel_id'                => $hash->{'afk_channel_id'},
-        'afk_timeout'                   => $hash->{'afk_timeout'},
-        'embed_enabled'                 => $hash->{'embed_enabled'},
-        'embed_channel_id'              => $hash->{'embed_channel_id'},
-        'verification_level'            => $hash->{'verification_level'},
-        'default_message_notifications' => $hash->{'default_message_notifications'},
-        'explicit_content_filter'       => $hash->{'explicit_content_filter'},
-        'mfa_level'                     => $hash->{'mfa_level'},
-        'application_id'                => $hash->{'application_id'},
-        'widget_enabled'                => $hash->{'widget_enabled'},
-        'widget_channel_id'             => $hash->{'widget_channel_id'},
-        'system_channel_id'             => $hash->{'system_channel_id'},
-        'joined_at'                     => $hash->{'joined_at'},
-        'large'                         => $hash->{'large'},
-        'unavailable'                   => $hash->{'unavailable'},
-        'member_count'                  => $hash->{'member_count'},
-    );
-    say "Added Guild: " . $guild->id . " -> " . $guild->name;
+    $self->_set_guild_top_level($guild, $hash);
+    $self->_set_guild_channels($guild, $hash);
+    $self->_set_guild_roles($guild, $hash);
+    $self->_set_guild_presences($guild, $hash);
+    $self->_set_guild_emojis($guild, $hash);
+    $self->_set_guild_members($guild, $hash);
+    # TO-DO: features and voice states
+}
 
-    return $guild;
+# Set top level simple guild attributes. 
+# You can pass in the entire guild hash safely as
+# complex attributes (ie, channels and roles) will be ignored.
+sub _set_guild_top_level
+{
+    my ($self, $guild, $hash) = @_;
+
+    $guild->set_attributes($hash);
 }
 
 # This sub adds the channels found in the discord guild hash to the specified guild.
 # Takes a Mojo::Discord::Guild object and a discord guild hash
-sub _create_guild_channels
+sub _set_guild_channels
 {
     my ($self, $guild, $hash) = @_;
 
@@ -613,7 +599,7 @@ sub _create_guild_channels
 
 # Adds roles to a guild object
 # Takes a Mojo::Discord::Guild object and a discord guild perl hash.
-sub _create_guild_roles
+sub _set_guild_roles
 {
     my ($self, $guild, $hash) = @_;
 
@@ -624,7 +610,7 @@ sub _create_guild_roles
     }
 }
 
-sub _create_guild_presences
+sub _set_guild_presences
 {
     my ($self, $guild, $hash) = @_;
 
@@ -638,7 +624,7 @@ sub _create_guild_presences
     }
 }
 
-sub _create_guild_emojis
+sub _set_guild_emojis
 {
     my ($self, $guild, $hash) = @_;
     
@@ -649,7 +635,7 @@ sub _create_guild_emojis
     }
 }
 
-sub _create_guild_members
+sub _set_guild_members
 {
     my ($self, $guild, $hash) = @_;
     
@@ -667,6 +653,10 @@ sub _create_guild_members
     }
 }
 
+# We receive this whenever we join a new guild
+# but also when we connect and start a new session.
+# It includes pretty well everything the server knows about the guild in question.
+# This sub creates and stores a Mojo::Discord::Guild object with all of that information.
 sub dispatch_guild_create
 {
     my ($self, $hash) = @_;
@@ -678,20 +668,65 @@ sub dispatch_guild_create
     $self->guilds->{$guild->id} = $guild;
 }
 
-sub dispatch_guild_modify
+# We receive this when someone makes changes to their guild configuration.
+# It contains a partial guild payload.
+# We can reuse basically all of the same functions used to create a guild.
+# The only diffrence is we start by looking up the existing guild object 
+# instead of creating a new one.
+sub dispatch_guild_update
 {
+    my ($self, $hash) = @_;
 
+    #say Dumper($hash);
+    say "Guild Update:";
+
+    my $gid = $hash->{'id'}; # Guild ID
+    my $guild = $self->guilds->{$gid}; # Guild object
+
+    # Populate the updated info
+    $self->_update_guild($guild, $hash);
 }
 
 sub dispatch_guild_delete
 {
+    my ($self, $hash) = @_;
+
+    say Dumper($hash);
+
+    # Probably just passes an ID, then find and delete that guild object.
 }
 
-# Start filling these in...
-sub dispatch_guild_member_add{}
-sub dispatch_guild_member_update{}
-sub dispatch_guild_member_remove{}
-sub dispatch_guild_members_chunk{}
+sub dispatch_guild_member_add
+{
+    my ($self, $hash) = @_;
+
+    say Dumper($hash);
+
+    # Should be able to just call self->set_members.... or guild->add_member
+}
+
+sub dispatch_guild_member_update
+{
+    my ($self, $hash) = @_;
+
+    say Dumper($hash);
+
+}
+
+sub dispatch_guild_member_remove
+{
+    my ($self, $hash) = @_;
+
+    say Dumper($hash);
+}
+
+sub dispatch_guild_members_chunk
+{
+    my ($self, $hash) = @_;
+
+    say Dumper($hash);
+}
+
 sub dispatch_guild_emojis_update{}
 sub dispatch_guild_role_create{}
 sub dispatch_guild_role_update{}

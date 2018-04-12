@@ -36,6 +36,58 @@ has afk_timeout                     => ( is => 'rw' );
 has verification_level              => ( is => 'rw' );
 has mfa_level                       => ( is => 'rw' );
 
+# Pass in a hash of top level attributes
+sub set_attributes
+{
+    my ($self, $hash) = @_;
+
+    # List of attributes it is possible to find at the top level
+    # of a guild object.
+    # This acts as a sort of whitelist so that complex structures like channels
+    # cannot be added this way.
+    my @attrs = (
+        'id',
+        'name',
+        'icon',
+        'splash',
+        'owner',
+        'owner_id',
+        'region',
+        'afk_channel_id',
+        'afk_timeout',
+        'embed_enabled',
+        'embed_channel_id',
+        'verification_level',
+        'default_message_notifications',
+        'explicit_content_filter',
+        'mfa_level',
+        'application_id',
+        'widget_enabled',
+        'widget_channel_id',
+        'system_channel_id',
+        'joined_at',
+        'large',
+        'unavailable',
+        'member_count',
+    );
+
+    foreach my $attr (@attrs)
+    {
+        if ( exists $hash->{$attr} )
+        {
+            $self->{$attr} = $hash->{$attr};
+            if ( defined $self->{$attr} )
+            {
+                say "\tHas Attribute: $attr -> $self->{$attr}";
+            }
+            else
+            {
+                say "\tHas Attribute: $attr -> undef";
+            }
+        }
+    }
+}
+
 # Need functions to add, remove, and edit things as they change.
 sub add_channel
 {
