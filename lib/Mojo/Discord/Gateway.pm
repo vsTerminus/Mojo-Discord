@@ -123,12 +123,16 @@ sub gateway
     my $tx = $ua->get($url);    # Fetch the Gateway WS URL
 
     # Store the URL in $self
-	print(Dumper($tx->res->json));
-	if (defined $tx->res->json->{'url'}) {
-		$self->websocket_url($tx->res->json->{'url'});
-	} else {
-		return 0;
-	}
+    if (defined $tx and defined $tx->res->json and defined $tx->res->json->{'url'})
+    {
+        $self->websocket_url($tx->res->json->{'url'});
+    }
+    else
+    {
+        say Dumper($tx->res->error);
+        die("Could not retrieve Gateway URL from '$url'");
+    }
+
     
 
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
