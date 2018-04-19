@@ -133,8 +133,6 @@ sub gateway
         die("Could not retrieve Gateway URL from '$url'");
     }
 
-    
-
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
 }
 
