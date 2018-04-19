@@ -24,101 +24,14 @@ I hope to improve this over time, but again because it's a side project I can on
 - **Mojo::UserAgent**  and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
 - **Compress::Zlib**, as some of the incoming messages are compressed Zlib blobs
 - **Mojo::JSON** to convert the compressed JSON messages into Perl structures.
-- **Encode::Guess** to determine whether we're dealing with a compressed stream or not
+- **Encode::Guess** to determine whether we're dealing with a compressed stream or not.
+- **IO::Socket::SSL** is required to fetch the Websocket URL for Discord to connect to.
 
 ### Example Program
 
 This application creates a very basic AI Chat Bot using the Hailo module (a modern implementation of MegaHAL)
 
-```perl
-#!/usr/bin/env perl
-
-use v5.10;
-use strict;
-use warnings;
-
-use Mojo::Discord;
-use Hailo;
-
-# Hailo vars
-my $hailo_brain = 'brain.sqlite';
-my $hailo = Hailo->new({'brain' => $hailo_brain});
-
-# Discord vars
-my $discord_token = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxx';    # This will be supplied to you in the Discord Developers section when you create a new bot user.
-my $discord_name = 'ChatBot9000';   # Username for chat.
-my $discord_url = 'https://localhost'; # Doesn't really matter what this URL is, it just has to be there, and it's supposed to match what you configure in your Discord application.
-my $discord_version = '0.1';    # Version of your application. Doesn't matter, it's just for your UserAgent string.
-my $discord_callbacks = {       # Tell Discord what functions to call for event callbacks. It's not POE, but it works.
-    'on_ready'          => \&on_ready,
-    'on_message_create' => \&on_message_create
-};
-my %self;   # We'll store some information about ourselves here from the Discord API
-
-# Create a new Mojo::Discord object, passing in the token, application name/url/version, and your callback functions as a hashref
-my $discord = Mojo::Discord->new(
-        {
-            'token' => $discord_token,
-            'name' => $discord_name,
-            'url' => $discord_url,
-            'version' => $discord_version,
-            'callbacks' => $discord_callbacks,
-            'verbose'   => 1
-        });
-        
-# Callback for on_ready event, which contains a bunch of useful information
-# We're only going to capture our username and user id for now, but there is a lot of other info in this structure.
-sub on_ready
-{
-    my ($hash) = @_;
-
-    $self{'username'} = $hash->{'user'}{'username'};
-    $self{'id'} = $hash->{'user'}{'id'};
-
-    $discord->status_update({'game' => 'Hailo'});
-};
-
-# "MESSAGE_CREATE" is the event generated when someone sends a text chat to a channel.
-# We'll capture some info about the author, the message contents, and the list of @mentions so we can see if we need to respond to something.
-# The incoming structure uses User IDs instead of Names in the content, so we'll swap those around so Hailo can generate a meaningful reply.
-# Finally, if we were mentioned at the start of the line, we'll have Hailo generate a reply to the text and send it back to the channel.
-sub on_message_create
-{
-    my $hash = shift;
-
-    # Store a few things from the hash structure
-    my $author = $hash->{'author'};
-    my $msg = $hash->{'content'};
-    my $channel = $hash->{'channel_id'};
-    my @mentions = @{$hash->{'mentions'}};
-
-    # Loop through the list of mentions and replace User IDs with Usernames.
-    foreach my $mention (@mentions)
-    {
-        my $id = $mention->{'id'};
-        my $username = $mention->{'username'};
-
-        # Replace the mention IDs in the message body with the usernames.
-        $msg =~ s/\<\@$id\>/$username/;
-    }
-
-    # If we were mentioned, generate a reply
-    if ( $msg =~ /^$self{'username'}/i )
-    {
-        $msg =~ s/^$self{'username'}.? ?//i;   # Remove the username. Can I do this as part of the if statement?
-
-        $discord->start_typing($channel); # Tell the channel we're thinking about a response
-        my $reply = $hailo->reply($msg);    # Sometimes this takes a while.
-        $discord->send_message( $channel, $reply ); # Send the response.
-    }
-
-}
-
-# Establish the web socket connection and start the listener
-# This should be the last line, as nothing below it will be executed.
-$discord->connect();
-
-```
+Rather than in-lining the code in the README, you can find the example program in [hailobot.pl](example/hailobot.pl). A [sample config file](/example/config.ini) is included. You just need to give it a valid Discord bot token.
 
 ## Mojo::Discord::Gateway
 
