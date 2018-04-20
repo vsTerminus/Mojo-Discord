@@ -7,3 +7,4 @@ requires 'Mojo::Util';
 requires 'Compress::Zlib';
 requires 'Encode::Guess';
 requires 'Data::Dumper';
+requires 'IO::Socket::SSL';
