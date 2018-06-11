@@ -98,19 +98,27 @@ sub username
 }
 
 # This updates the client status
-# Takes a hashref with 'idle_since' and/or 'game' present.
-# idle_since should be the epoch time in ms, game is a text string.
+# Takes a hashref with bare minimum 'name' specified. That is the name of the currently playing game or song or whatever.
+# Type is
+# 0 = Playing
+# 1 = Streaming
+# 2 = Listening to
 sub status_update
 {
     my ($self, $param) = @_;
 
-    my $idle = $param->{'idle_since'} if defined $param->{'idle_since'};
-    my $game = $param->{'game'} if defined $param->{'game'};
     my $op = 3;
     my $d = {};
-    $d->{'idle_since'} = ( defined $idle ? $idle : undef );
-    $d->{'game'}{'name'} = $game if defined $game;
 
+    $d->{'afk'} = $param->{'afk'} // 0;
+    $d->{'since'} = $param->{'since'} // undef;
+    $d->{'game'}{'name'} = $param->{'name'} // undef;
+    $d->{'game'}{'type'} = $param->{'type'} // 0;
+    $d->{'game'}{'details'} = $param->{'details'} // undef;
+    $d->{'game'}{'state'} = $param->{'state'} // undef;
+    $d->{'status'} = $param->{'status'} // "online";
+
+    
     $self->send_op($op, $d);
 }
 
