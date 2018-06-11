@@ -266,7 +266,7 @@ sub on_finish
 
     $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
-    say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)";
+    say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)" if $self->verbose;
 
     if ( !defined $tx )
     {
@@ -283,7 +283,7 @@ sub on_finish
         die("Unable to remove Heartbeat Timer Loop. Cannot recover automatically.");
     }
     say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
-    Mojo::IOLoop->remove($self->heartbeat_loop);
+    Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
     undef $self->{'heartbeat_loop'};
 
 
