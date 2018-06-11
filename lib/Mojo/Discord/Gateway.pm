@@ -5,7 +5,7 @@ our $VERSION = '0.001';
 use Mojo::Base -base;
 
 use Mojo::UserAgent;
-use Mojo::JSON qw(decode_json encode_json);
+use JSON::MaybeXS;
 use Mojo::IOLoop;
 use Compress::Zlib;
 use Encode::Guess;
@@ -176,7 +176,17 @@ sub send_op
     $package->{'s'} = $s if defined $s;
     $package->{'t'} = $t if defined $t;
 
-    my $json = encode_json($package);
+    # Seems Discord parses JSON incorrectly when it contains unicode
+    # JSON::MaybeXS works with the ascii option to escape unicode characters.
+    my $json = JSON::MaybeXS->new(
+        utf8 => 1, 
+        ascii => 1, 
+        canonical => 1, 
+        allow_nonref => 1, 
+        allow_unknown => 1, 
+        allow_blessed => 1, 
+        convert_blessed => 1
+        )->encode($package);
 
     say localtime(time) . " " . $json if $self->verbose;
 
@@ -273,6 +283,11 @@ sub on_finish
         say localtime(time) . " (on_finish) \$tx is unexpectedly undefined.";
         die("\$tx is not defined. Cannot recover automatically.");
     }
+    else
+    {
+        $tx->finish;
+    }
+
 
     # Remove the heartbeat timer loop
     # The problem seems to be removing this if $tx goes away on its own.
@@ -290,7 +305,8 @@ sub on_finish
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
     
-    #$tx->finish;
+    say "Is finished? " . $tx->is_finished if $self->verbose;
+
     undef $tx;
     $self->tx(undef);
 
