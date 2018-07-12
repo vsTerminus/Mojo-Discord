@@ -61,7 +61,8 @@ my %no_resume = (
     '4010' => 'Invalid Shard'
 );
 
-has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect', 'timeout']; # Passed in - hopefully
+has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
+has timeout => 5;
 has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
 has ['s', 'websocket_url', 'tx'];
 has ['heartbeat_interval', 'heartbeat_loop'];
