@@ -61,7 +61,7 @@ my %no_resume = (
     '4010' => 'Invalid Shard'
 );
 
-has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
+has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect', 'timeout']; # Passed in - hopefully
 has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
 has ['s', 'websocket_url', 'tx'];
 has ['heartbeat_interval', 'heartbeat_loop'];
@@ -81,7 +81,7 @@ sub new
 
     $self->ua->transactor->name($self->agent);
     $self->ua->inactivity_timeout(120);
-    $self->ua->connect_timeout(5);
+    $self->ua->connect_timeout($self->timeout);
 
     $self->ua->on(start => sub {
         my ($ua, $tx) = @_;
