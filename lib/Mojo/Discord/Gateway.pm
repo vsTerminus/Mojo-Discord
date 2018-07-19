@@ -62,6 +62,7 @@ my %no_resume = (
 );
 
 has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
+has timeout => 5;
 has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
 has ['s', 'websocket_url', 'tx'];
 has ['heartbeat_interval', 'heartbeat_loop'];
@@ -81,7 +82,7 @@ sub new
 
     $self->ua->transactor->name($self->agent);
     $self->ua->inactivity_timeout(120);
-    $self->ua->connect_timeout(5);
+    $self->ua->connect_timeout($self->timeout);
 
     $self->ua->on(start => sub {
         my ($ua, $tx) = @_;

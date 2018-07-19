@@ -8,7 +8,7 @@ use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
 use Data::Dumper;
 
-has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'callbacks'];
+has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'timeout', 'callbacks'];
 has base_url    => 'https://discordapp.com/api';
 has gw          => sub { Mojo::Discord::Gateway->new(shift) };
 has rest        => sub { Mojo::Discord::REST->new(shift) };
