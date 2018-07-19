@@ -62,6 +62,12 @@ sub leave_guild
     $self->rest->leave_guild($user, $guild, $callback);
 }
 
+sub set_topic
+{
+    my ($self, $channel, $topic, $callback) = @_;
+    $self->rest->set_topic($channel, $topic, $callback);
+}
+
 # Supports hashref or string.
 # String for simple messages, hashref if you need to use embeds or tts flag.
 sub send_message
