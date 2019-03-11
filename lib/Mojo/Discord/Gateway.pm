@@ -56,6 +56,7 @@ my %no_resume = (
     '1009' => 'Message Too Big',
     '1011' => 'Internal Server Err',
     '1012' => 'Service Restart',
+    '4003' => 'Not Authenticated',
     '4007' => 'Invalid Sequence',
     '4009' => 'Session Timeout',
     '4010' => 'Invalid Shard'
@@ -284,7 +285,7 @@ sub on_finish
         say localtime(time) . " (on_finish) \$tx is unexpectedly undefined.";
         die("\$tx is not defined. Cannot recover automatically.");
     }
-    else
+    elsif (!$tx->is_finished)
     {
         $tx->finish;
     }
