@@ -131,7 +131,7 @@ sub delete_message
 sub set_topic
 {
     my ($self, $channel, $topic, $callback) = @_;
-    my $url = $self->base_url . "channels/$channel";
+    my $url = $self->base_url . "/channels/$channel";
     my $json = {
         'topic' => $topic
     };
