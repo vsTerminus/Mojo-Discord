@@ -50,7 +50,7 @@ my %close = (
 # Prevent sending a reconnect following certain codes.
 # This always requires a new session to be established if these codes are encountered.
 # Not sure if 1000 and 1001 require this, but I don't think it hurts to include them.
-my %no_resume = ( 
+my %no_resume = (
     '1000' => 'Normal Closure',
     '1001' => 'Going Away',
     '1009' => 'Message Too Big',
@@ -72,10 +72,11 @@ has gateway_encoding    => 'json';
 has agent               => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' };
 has allow_resume        => 1;
 has heartbeat_check     => 0;
+has connected           => 0;
 has ua                  => sub { Mojo::UserAgent->new };
 
 # Custom Constructor to set transactor name and insert token into every request
-sub new 
+sub new
 {
     my $self = shift->SUPER::new(@_);
 
@@ -87,7 +88,7 @@ sub new
         my ($ua, $tx) = @_;
         $tx->req->headers->authorization($self->token);
     });
-     
+
     return $self;
 }
 
@@ -118,7 +119,6 @@ sub status_update
     $d->{'game'}{'state'} = $param->{'state'} // undef;
     $d->{'status'} = $param->{'status'} // "online";
 
-    
     $self->send_op($op, $d);
 }
 
@@ -278,10 +278,11 @@ sub on_finish
     $reason = "Unknown" unless defined $reason and length $reason > 0;
     say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)" if $self->verbose;
 
+    $self->connected(0);
+
     if ( !defined $tx )
     {
-        say localtime(time) . " (on_finish) \$tx is unexpectedly undefined.";
-        die("\$tx is not defined. Cannot recover automatically.");
+        say localtime(time) . " (on_finish) \$tx is unexpectedly undefined - cannot recover.";
     }
     else
     {
@@ -295,16 +296,17 @@ sub on_finish
     if ( !defined $self->heartbeat_loop)
     {
         say localtime(time) . " (on_finish) Heartbeat Loop variable is unexpectedly undefined.";
-        die("Unable to remove Heartbeat Timer Loop. Cannot recover automatically.");
     }
-    say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
-    Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
-    undef $self->{'heartbeat_loop'};
-
+    else
+    {
+      say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
+      Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
+      undef $self->{'heartbeat_loop'};
+    }
 
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'on_finish'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'on_finish'};
-    
+
     say "Is finished? " . $tx->is_finished if $self->verbose;
 
     undef $tx;
@@ -481,6 +483,8 @@ sub on_invalid_session
 sub on_hello
 {
     my ($self, $tx, $hash) = @_;
+
+    $self->connected(1);
 
     # The Hello packet gives us our heartbeat interval, so we can start sending those.
     $self->heartbeat_interval( $hash->{'d'}{'heartbeat_interval'} / 1000 );
