@@ -57,6 +57,12 @@ sub init
     $self->gw->gw_connect($gw_url);
 }
 
+sub connected
+{
+    my $self = shift;
+    return $self->gw->connected;
+}
+
 sub resume
 {
     my $self = shift;
