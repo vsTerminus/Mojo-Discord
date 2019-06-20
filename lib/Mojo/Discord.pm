@@ -31,6 +31,14 @@ sub init
     $self->guilds({});
     $self->channels({});
 
+    $self->rest(Mojo::Discord::REST->new(
+        'token'         => $self->token,
+        'name'          => $self->name,
+        'url'           => $self->url,
+        'version'       => $self->version,
+        'verbose'       => $self->verbose,
+    ));
+
     $self->gw(Mojo::Discord::Gateway->new(
         'token'         => $self->token,
         'name'          => $self->name,
@@ -42,13 +50,8 @@ sub init
         'base_url'      => $self->base_url,
     ));
 
-    $self->rest(Mojo::Discord::REST->new(
-        'token'         => $self->token,
-        'name'          => $self->name,
-        'url'           => $self->url,
-        'version'       => $self->version,
-        'verbose'       => $self->verbose,
-    ));
+    # Give the gateway object access to the REST object.
+    $self->gw->rest($self->rest);
 
     # Get Gateway URL
     my $gw_url = $self->gw->gateway;
@@ -80,10 +83,16 @@ sub disconnect
     $self->gw->gw_disconnect($reason);
 }
 
+sub add_user
+{
+    my ($self, $id) = @_;
+
+    $self->gw->add_user({ id => $id })
+}
+
 sub get_user
 {
     my ($self, $id, $callback) = @_;
-
 
     if ( exists $self->gw->users->{$id} )
     {
@@ -176,6 +185,15 @@ sub get_guild_webhooks
 
     $self->rest->get_guild_webhooks($guild, $callback);
 }
+
+# Only get cached webhooks, do not fetch from REST API
+sub get_cached_webhooks
+{
+    my ($self, $channel) = @_;
+
+    return $self->gw->webhooks->{$channel};
+}
+
 
 __PACKAGE__->meta->make_immutable;
 

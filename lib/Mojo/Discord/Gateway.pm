@@ -12,6 +12,7 @@ use JSON::MaybeXS;
 use Mojo::IOLoop;
 use Mojo::Discord::User;
 use Mojo::Discord::Guild;
+use Mojo::Discord::REST;
 use Compress::Zlib;
 use Encode::Guess;
 use Data::Dumper;
@@ -132,6 +133,8 @@ has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new }
 has guilds              => ( is => 'rw', default => sub { {} } );
 has channels            => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
+has webhooks            => ( is => 'rw', default => sub { {} } );
+has rest                => ( is => 'rw' );
 
 sub BUILD
 { 
@@ -539,7 +542,10 @@ sub dispatch_typing_start
 
 sub dispatch_message_create
 {
-    
+   my ($self, $hash) = @_;
+   my $id = $hash->{'author'}{'id'};
+   # Update what we know about people when they talk.
+   $self->add_user($hash->{'author'}) unless exists $self->users->{id};
 }
 
 sub dispatch_message_update
@@ -685,6 +691,34 @@ sub dispatch_guild_create
 
     # Store it in our guilds hash.
     $self->guilds->{$guild->id} = $guild;
+
+    # To-Do:
+    # Check current permissions to see whether or not I can fetch the entire guild's list of webhooks
+    # or if I have to go channel by channel
+    # (or if I have no webhook access at all)
+    # For now, let's just assume we have guild level permission.
+
+    # Get and store this guild's webhooks
+    $self->rest->get_guild_webhooks($guild->id, sub
+    {
+        my $json = shift;
+        $self->_set_guild_webhooks($json);
+    });
+}
+
+sub _set_guild_webhooks
+{
+    my ($self, $json) = @_;
+
+
+    my $hooks = $self->webhooks;
+    # This returns an array of hooks, so we have to look at the channel_id field and build our own arrays.
+    foreach my $hook (@$json)
+    {
+        my $cid = $hook->{'channel_id'};
+        push @{$self->webhooks->{$cid}}, $hook;
+        say "\tHas Webhook: " . $cid . " -> " . $hook->{'name'};
+    }
 }
 
 # We receive this when someone makes changes to their guild configuration.
@@ -756,7 +790,24 @@ sub dispatch_channel_create{}
 sub dispatch_channel_modify{}
 sub dispatch_channel_delete{}
 sub dispatch_presence_update{}
-sub dispatch_webhooks_update{}
+
+sub dispatch_webhooks_update
+{
+    my ($self, $hash) = @_;
+
+    my $rest = $self->rest;
+    my $channel = $hash->{'channel_id'};
+
+    # Delete the current list of webhooks for this channel
+    delete $self->webhooks->{$channel};
+
+    # And request the most up to date ones from the REST interface.
+    $rest->get_channel_webhooks($channel, sub
+    {
+        # Store them as-is.
+        $self->webhooks->{$channel} = shift;
+    });
+}
 
 # There is no dispatch event for this. Rather, discord makes you aware of new users
 # through various guild events. Any time we are made aware of a potentially new user
@@ -771,7 +822,6 @@ sub add_user
     my $user = Mojo::Discord::User->new($args);
 
     # Make the bot aware of this user.
-#    $self->users($id => $user);
     $self->users->{$id} = $user;
 
     # Return the new user object to the caller.
