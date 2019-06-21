@@ -2,36 +2,48 @@
 
 This is a set of Perl Modules designed to implement parts of the Discord public API, build on Mojo::IOLoop.
 
-There are four modules involved
 
-- **Mojo::Discord::Auth** handles OAuth2
-- **Mojo::Discord::Gateway** handles the Websocket realtime event monitoring part (connect and monitor the chat)
-- **Mojo::Discord::REST** handles calls to the REST web API, which mostly handles actions you want the bot to take
-- **Mojo::Discord** is a wrapper that saves the user the trouble of managing both REST and Gateway APIs manually.
+## Moo Branch
+
+This branch is for the migration from Mojo::Base to Moo with the primary goal being to move all Discord state tracking out of the bot client and into the library. Things like user presence, emojis, webhooks, and so on should all be tracked by the library so the client can simply ask for them any time.
+
+At some point I will merge this into Master and it will become Version 2. For now I'm keeping it on a separate branch.
+
+## Modules
+
+The primary modules involved are:
+
+- **Mojo::Discord** - A top level wrapper and single point of entry for all other modules
+- **Mojo::Discord::Auth** - OAuth 2 implementation (largely incomplete)
+- **Mojo::Discord::REST** - REST API wrapper
+- **Mojo::Discord::Gateway** - Discord Websocket client implementation
+- **Mojo::Discord::User** - Discord User object, stores properties about users
+- **Mojo::Discord::Guild** - Manage all properties related to guilds (Servers)
 
 ## Note: This is a spare-time project
 
 I offer no promises as to code completion, timeline, or even support. If you have questions I will try to answer.
 
 
-## Second Note: Amateur code warning
+## Second Note: Do not rely on this code.
 
-I would recommend not building anything on this code for now. It is lacking in documentation, error handling, and other things.
-I hope to improve this over time, but again because it's a side project I can only do so much with the time I have.
+I recommend you do not build anything on this library, as I have a tendency to stop working on this for long stretches at a time... I don't want to be responsible for stalling out your projects. So if you want to build something with this, be prepared to fork the repo and modify it yourself.
 
 ## Pre-Requisites
 
 - **Mojo::UserAgent**  and **Mojo::IOLoop** to provide non-blocking asynchronous HTTP calls and websocket functionality.
 - **Compress::Zlib**, as some of the incoming messages are compressed Zlib blobs
 - **Mojo::JSON** to convert the compressed JSON messages into Perl structures.
+- **Mojo::Util** to handle base64 avatar data conversion.
+- **JSON::MaybeXS** for proper escaping of unicode characters so discord will encode them correctly.
 - **Encode::Guess** to determine whether we're dealing with a compressed stream or not.
+- **Data::Dumper** to print any object to screen for debugging.
 - **IO::Socket::SSL** is required to fetch the Websocket URL for Discord to connect to.
 
-### Example Program
+These dependencies can be installed using cpanminus with the following command in the project root:
+    
+    cpanm --installdeps .
 
-This application creates a very basic AI Chat Bot using the Hailo module (a modern implementation of MegaHAL)
-
-Rather than in-lining the code in the README, you can find the example program in [hailobot.pl](example/hailobot.pl). A [sample config file](/example/config.ini) is included. You just need to give it a valid Discord bot token.
 
 ## Mojo::Discord::Gateway
 
