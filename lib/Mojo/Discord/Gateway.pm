@@ -315,9 +315,9 @@ sub on_finish
 {
     my ($self, $tx, $code, $reason) = @_;
     my $callbacks = $self->callbacks;
-    my %close = $self->close;
+    my $close = $self->close;
 
-    $reason = $close{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close{$code} );
+    $reason = $close->{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close->{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
     say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)" if $self->verbose;
 
@@ -710,8 +710,13 @@ sub _set_guild_webhooks
 {
     my ($self, $json) = @_;
 
+    if ( ref $json ne 'ARRAY' )
+    {
+        say "-------- webhooks json is not an array ---------------";
+        say Dumper($json);
+        say "------------------------------------------------------";
+    }
 
-    my $hooks = $self->webhooks;
     # This returns an array of hooks, so we have to look at the channel_id field and build our own arrays.
     foreach my $hook (@$json)
     {
