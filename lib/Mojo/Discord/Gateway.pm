@@ -98,6 +98,7 @@ has no_resume => ( is => 'ro', default => sub {
         '1009' => 'Message Too Big',
         '1011' => 'Internal Server Err',
         '1012' => 'Service Restart',
+        '4003' => 'Not Authenticated',
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
         '4010' => 'Invalid Shard'
@@ -327,7 +328,7 @@ sub on_finish
     {
         say localtime(time) . " (on_finish) \$tx is unexpectedly undefined." if $self->verbose;
     }
-    else
+    elsif ( !$tx->is_finished )
     {
         $tx->finish;
     }
