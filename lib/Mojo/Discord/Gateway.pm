@@ -358,8 +358,8 @@ sub on_finish
     $self->tx(undef);
 
     # Block reconnect for specific codes.
-    my %no_resume = $self->no_resume;
-    #$self->allow_resume(0) if exists $no_resume->{$code};
+    my $no_resume = $self->no_resume;
+    $self->allow_resume(0) if exists $no_resume->{$code};
 
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->reconnect )
