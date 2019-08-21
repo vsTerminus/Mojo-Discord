@@ -76,16 +76,10 @@ sub set_attributes
         if ( exists $hash->{$attr} )
         {
             $self->{$attr} = $hash->{$attr};
-            if ( defined $self->{$attr} )
-            {
-                say "\tHas Attribute: $attr -> $self->{$attr}";
-            }
-            else
-            {
-                say "\tHas Attribute: $attr -> undef";
-            }
         }
     }
+
+    say "\tJoined Guild: " . $self->{'id'} . " -> " . $self->{'name'};
 }
 
 # Need functions to add, remove, and edit things as they change.

@@ -53,6 +53,7 @@ has dispatches => ( is => 'ro', default => sub {
         'CHANNEL_DELETE'        => \&dispatch_channel_delete,
         'PRESENCE_UPDATE'       => \&dispatch_presence_update,
         'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
+        'READY'                 => \&dispatch_ready,
         # More as needed
     }
 });
@@ -128,6 +129,7 @@ has base_url            => ( is => 'ro', default => 'https://discordapp.com/api'
 has gateway_url         => ( is => 'rw', default => sub { shift->base_url . '/gateway' });
 has gateway_version     => ( is => 'ro', default => 6 );
 has gateway_encoding    => ( is => 'ro', default => 'json' );
+has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this maybe be a config.ini value??
 has agent               => ( is => 'rw' );
 has allow_resume        => ( is => 'rw', default => 1 );
 has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
@@ -268,6 +270,12 @@ sub gw_connect
 #            say localtime(time) . ' WebSocket handshake failed!';
             return;
         }
+
+        # Large servers send large packets of information listing their channels and other attributes.
+        # By default Mojo sets a max message length of 256KiB, and anything larger triggers it to close the
+        # connection with code 1009 - Message Too Long.
+        # We can up the length here or by setting the MOJO_MAX_WEBSOCKET_SIZE environment variable.
+        $tx->max_websocket_size($self->max_websocket_size);
     
         say localtime(time) . ' WebSocket Connection Established.' if $self->verbose;
         $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
@@ -536,6 +544,10 @@ sub on_dispatch # OPCODE 0
     $self->callback($t, $d);
 }
 
+sub dispatch_ready
+{
+}
+
 sub dispatch_typing_start
 {
     
@@ -568,7 +580,7 @@ sub _create_guild
 {
     my ($self, $hash) = @_;
 
-    say "Joined a Guild:";
+    #say "Joined a Guild:";
     my $guild = Mojo::Discord::Guild->new();
     $self->_update_guild($guild, $hash);
 
@@ -619,7 +631,7 @@ sub _set_guild_channels
         # Create a link from the channel ID to the Guild ID
         $self->channels->{$channel->id} = $guild->id;
         
-        say "\tHas Channel: " . $channel->id . " -> " . $channel->name;
+        #say "\tHas Channel: " . $channel->id . " -> " . $channel->name;
     }
 }
 
@@ -632,7 +644,7 @@ sub _set_guild_roles
     foreach my $role_hash (@{$hash->{'roles'}})
     {
         my $role = $guild->add_role($role_hash);
-        say "\tHas Role: " . $role->id . " -> " . $role->name;
+        #say "\tHas Role: " . $role->id . " -> " . $role->name;
     }
 }
 
@@ -646,7 +658,7 @@ sub _set_guild_presences
         $presence_hash->{'id'} = $presence_hash->{'user'}->{'id'};
 
         my $presence = $guild->add_presence($presence_hash);
-        say "\tHas Presence: " . $presence->id . " -> " . $presence->status;
+        #say "\tHas Presence: " . $presence->id . " -> " . $presence->status;
     }
 }
 
@@ -657,7 +669,7 @@ sub _set_guild_emojis
     foreach my $emoji_hash (@{$hash->{'emojis'}})
     {
         my $emoji = $guild->add_emoji($emoji_hash);
-        say "\tHas Emoji: " . $emoji->id . " -> " . $emoji->name;
+        #say "\tHas Emoji: " . $emoji->id . " -> " . $emoji->name;
     }
 }
 
@@ -675,7 +687,7 @@ sub _set_guild_members
         my $user_hash = $member_hash->{'user'};
         my $user = $self->add_user($user_hash);
         
-        say "\tHas Member: " . $member->id . " -> " . $user->username;
+        #say "\tHas Member: " . $member->id . " -> " . $user->username;
     }
 }
 
@@ -713,9 +725,8 @@ sub _set_guild_webhooks
 
     if ( ref $json ne 'ARRAY' )
     {
-        say "-------- webhooks json is not an array ---------------";
-        say Dumper($json);
-        say "------------------------------------------------------";
+        say "\tCannot query guild webhooks: " . $json->{'message'} . " (" . $json->{'code'} . ")";
+        return;
     }
 
     # This returns an array of hooks, so we have to look at the channel_id field and build our own arrays.
@@ -723,7 +734,7 @@ sub _set_guild_webhooks
     {
         my $cid = $hook->{'channel_id'};
         push @{$self->webhooks->{$cid}}, $hook;
-        say "\tHas Webhook: " . $cid . " -> " . $hook->{'name'};
+        #say "\tHas Webhook: " . $cid . " -> " . $hook->{'name'};
     }
 }
 
