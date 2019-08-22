@@ -128,6 +128,20 @@ sub delete_message
     });
 }
 
+sub set_topic
+{
+    my ($self, $channel, $topic, $callback) = @_;
+    my $url = $self->base_url . "/channels/$channel";
+    my $json = {
+        'topic' => $topic
+    };
+    $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
 sub get_user
 {
     my ($self, $id, $callback) = @_;
@@ -280,6 +294,21 @@ sub get_guild_webhooks
     {
         my ($ua, $tx) = @_;
 
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+sub add_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
+    my $json;
+    
+    $self->ua->put($url => {Accept => '*/*'} => json => $json => sub
+    {   
+        my ($ua, $tx) = @_;
+        
         $callback->($tx->res->json) if defined $callback;
     });
 }

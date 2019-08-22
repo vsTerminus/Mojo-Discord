@@ -56,12 +56,14 @@ my %no_resume = (
     '1009' => 'Message Too Big',
     '1011' => 'Internal Server Err',
     '1012' => 'Service Restart',
+    '4003' => 'Not Authenticated',
     '4007' => 'Invalid Sequence',
     '4009' => 'Session Timeout',
     '4010' => 'Invalid Shard'
 );
 
 has ['token', 'name', 'url', 'version', 'callbacks', 'verbose', 'reconnect']; # Passed in - hopefully
+has timeout => 5;
 has ['id', 'username', 'avatar', 'discriminator', 'session_id']; # Learned from READY packet
 has ['s', 'websocket_url', 'tx'];
 has ['heartbeat_interval', 'heartbeat_loop'];
@@ -82,7 +84,7 @@ sub new
 
     $self->ua->transactor->name($self->agent);
     $self->ua->inactivity_timeout(120);
-    $self->ua->connect_timeout(5);
+    $self->ua->connect_timeout($self->timeout);
 
     $self->ua->on(start => sub {
         my ($ua, $tx) = @_;
@@ -284,7 +286,7 @@ sub on_finish
     {
         say localtime(time) . " (on_finish) \$tx is unexpectedly undefined - cannot recover.";
     }
-    else
+    elsif (!$tx->is_finished)
     {
         $tx->finish;
     }

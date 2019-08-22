@@ -8,7 +8,7 @@ use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
 use Data::Dumper;
 
-has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'callbacks'];
+has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'timeout', 'callbacks'];
 has base_url    => 'https://discordapp.com/api';
 has gw          => sub { Mojo::Discord::Gateway->new(shift) };
 has rest        => sub { Mojo::Discord::REST->new(shift) };
@@ -67,6 +67,12 @@ sub leave_guild
     my ($self, $user, $guild, $callback) = @_;
 
     $self->rest->leave_guild($user, $guild, $callback);
+}
+
+sub set_topic
+{
+    my ($self, $channel, $topic, $callback) = @_;
+    $self->rest->set_topic($channel, $topic, $callback);
 }
 
 # Supports hashref or string.
