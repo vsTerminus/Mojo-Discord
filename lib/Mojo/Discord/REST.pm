@@ -298,4 +298,19 @@ sub get_guild_webhooks
     });
 }
 
+sub add_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
+    my $json;
+    
+    $self->ua->put($url => {Accept => '*/*'} => json => $json => sub
+    {   
+        my ($ua, $tx) = @_;
+        
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
 1;
