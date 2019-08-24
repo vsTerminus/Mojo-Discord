@@ -161,12 +161,16 @@ sub status_update
 {
     my ($self, $param) = @_;
 
-    my $idle = $param->{'idle_since'} if defined $param->{'idle_since'};
+    my $idle = $param->{'since'} if defined $param->{'since'};
     my $game = $param->{'game'} if defined $param->{'game'};
     my $op = 3;
     my $d = {};
-    $d->{'idle_since'} = ( defined $idle ? $idle : undef );
+    $d->{'since'} = ( defined $idle ? $idle : undef );
     $d->{'game'}{'name'} = $game if defined $game;
+    $d->{'game'}{'type'} = 0 if defined $game;
+    $d->{'status'} = 'online';
+    $d->{'afk'} = \0;
+
     $self->send_op($op, $d);
 }
 
