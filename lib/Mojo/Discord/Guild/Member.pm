@@ -9,6 +9,4 @@ has roles           => ( is => 'rw' );
 has deaf            => ( is => 'rw' );
 has joined_at       => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

@@ -75,7 +75,5 @@ sub request_token
     return decode_json($result);
 }
 
-__PACKAGE__->meta->make_immutable;
-
 1;
 

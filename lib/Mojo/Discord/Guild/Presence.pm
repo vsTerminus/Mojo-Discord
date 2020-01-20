@@ -7,6 +7,4 @@ has id      => ( is => 'rw' ); # ID will be the user id.
 has game    => ( is => 'rw' );
 has status  => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

@@ -11,6 +11,4 @@ has topic                   => ( is => 'rw' );
 has type                    => ( is => 'rw' );
 has name                    => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

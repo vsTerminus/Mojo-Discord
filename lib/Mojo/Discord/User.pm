@@ -10,6 +10,4 @@ has nick            => ( is => 'rw' );
 has discriminator   => ( is => 'rw' );
 has avatar          => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

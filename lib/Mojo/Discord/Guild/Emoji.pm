@@ -9,6 +9,4 @@ has require_colons  => ( is => 'rw' );
 has managed         => ( is => 'rw' );
 has roles           => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

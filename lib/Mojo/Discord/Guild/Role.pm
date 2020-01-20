@@ -12,6 +12,4 @@ has position        => ( is => 'rw' );
 has hoist           => ( is => 'rw' );
 has color           => ( is => 'rw' );
 
-__PACKAGE__->meta->make_immutable;
-
 1;

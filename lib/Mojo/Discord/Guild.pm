@@ -192,8 +192,4 @@ sub remove_member
 #    delete $self->members{$member_id};
 }
 
-
-
-__PACKAGE__->meta->make_immutable;
-
 1;
