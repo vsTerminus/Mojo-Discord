@@ -15,7 +15,6 @@ use Mojo::Discord::Guild;
 use Mojo::Discord::REST;
 use Compress::Zlib;
 use Encode::Guess;
-use Data::Dumper;
 
 use namespace::clean;
 
@@ -77,7 +76,7 @@ has close => ( is => 'ro', default => sub {
         '1013'  => 'Try Again Later',
         '1015'  => 'TLS Handshake',
         '4000'  => 'Unknown Error',
-        '4001'  => 'Unknown Opcode',
+        '4001'  => 'Invalid Opcode or Payload',
         '4002'  => 'Decode Error',
         '4003'  => 'Not Authenticated',
         '4004'  => 'Authentication Failed',
@@ -131,7 +130,7 @@ has gateway_encoding    => ( is => 'ro', default => 'json' );
 has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this maybe be a config.ini value??
 has agent               => ( is => 'rw' );
 has allow_resume        => ( is => 'rw', default => 1 );
-has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
+has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new->with_roles('+Queued') } );
 has guilds              => ( is => 'rw', default => sub { {} } );
 has channels            => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
@@ -148,6 +147,7 @@ sub BUILD
     $self->ua->transactor->name($self->agent);
     $self->ua->inactivity_timeout(120);
     $self->ua->connect_timeout(5);
+    $self->ua->max_active(1);
     $self->ua->on(start => sub {
        my ($ua, $tx) = @_;
        $tx->req->headers->authorization($self->token);
@@ -160,6 +160,7 @@ sub BUILD
 # 0 = Playing
 # 1 = Streaming
 # 2 = Listening to
+# 3 = Watching
 sub status_update
 {
     my ($self, $param) = @_;
@@ -211,7 +212,17 @@ sub send_op
 {
     my ($self, $op, $d, $s, $t) = @_;
 
-    my $tx = $self->tx;
+     my $package = {
+        'op' => int($op), # Ensure JSON::MaybeXS encodes this as an integer, not a string. Discord will reject string opcodes.
+        'd' => $d
+    };
+
+    $package->{'s'} = $s if defined $s;
+    $package->{'t'} = $t if defined $t;
+
+    $self->log->debug('[Gateway.pm] [send_op] Sending Package: ' . Data::Dumper->Dump([$package], ['package']));
+
+     my $tx = $self->tx;
 
     if ( !defined $tx ) 
     {
@@ -226,14 +237,6 @@ sub send_op
         return;
     } 
 
-    my $package = {
-        'op' => $op,
-        'd' => $d
-    };
-
-    $package->{'s'} = $s if defined $s;
-    $package->{'t'} = $t if defined $t;
-
     # Seems Discord parses JSON incorrectly when it contains unicode
     # JSON::MaybeXS works with the ascii option to escape unicode characters.
     my $json = JSON::MaybeXS->new(
@@ -246,7 +249,7 @@ sub send_op
         convert_blessed => 1
         )->encode($package);
 
-    $self->log->debug("[Gateway.pm] [send_op] Sent: \n\t" . Data::Dumper->Dump([$package], ['package']));
+    $self->log->debug("[Gateway.pm] [send_op] Sent: \n\t" . Data::Dumper->Dump([$json], ['json']));
     $tx->send($json);
 }
 
@@ -277,9 +280,9 @@ sub gw_connect
         my ($ua, $tx) = @_;
         unless ($tx->is_websocket)
         {
-            $self->on_finish(-1, 'Websocket Handshake Failed');
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
+            $self->on_finish(-1, 'Websocket Handshake Failed');
             return;
         }
 
@@ -499,7 +502,7 @@ sub send_ident
     };
 
     $self->log->debug('[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY');
-    send_op($self, $op, $d);
+    $self->send_op($op, $d);
 }
 
 # This has to be sent after reconnecting
@@ -516,7 +519,7 @@ sub send_resume
     };
 
     $self->log->debug('[Gateway.pm] [send_resume] Sending OP $op SEQ $s RESUME');
-    send_op($self, $op, $d);
+    $self->send_op($op, $d);
 }
 
 # Pass a hashref to a callback function if it exists
@@ -527,8 +530,7 @@ sub callback
 
     if ( !defined $event )
     {
-        say localtime(time) . ": No event defined for callback";
-        $self->log->warn('[Gateway.pm] [callback] Undefined event: ' . $event);
+        $self->log->warn('[Gateway.pm] [callback] event is undefined');
     }
     elsif ( exists $callbacks->{$event} )
     {
@@ -594,7 +596,6 @@ sub _create_guild
 {
     my ($self, $hash) = @_;
 
-    #say "Joined a Guild:";
     my $guild = Mojo::Discord::Guild->new();
     $self->_update_guild($guild, $hash);
 
@@ -644,8 +645,6 @@ sub _set_guild_channels
         # This way we can do just about any operation with only a channel ID to go on.
         # Create a link from the channel ID to the Guild ID
         $self->channels->{$channel->id} = $guild->id;
-        
-        #say "\tHas Channel: " . $channel->id . " -> " . $channel->name;
     }
 }
 
@@ -658,7 +657,6 @@ sub _set_guild_roles
     foreach my $role_hash (@{$hash->{'roles'}})
     {
         my $role = $guild->add_role($role_hash);
-        #say "\tHas Role: " . $role->id . " -> " . $role->name;
     }
 }
 
@@ -672,7 +670,6 @@ sub _set_guild_presences
         $presence_hash->{'id'} = $presence_hash->{'user'}->{'id'};
 
         my $presence = $guild->add_presence($presence_hash);
-        #say "\tHas Presence: " . $presence->id . " -> " . $presence->status;
     }
 }
 
@@ -683,7 +680,6 @@ sub _set_guild_emojis
     foreach my $emoji_hash (@{$hash->{'emojis'}})
     {
         my $emoji = $guild->add_emoji($emoji_hash);
-        #say "\tHas Emoji: " . $emoji->id . " -> " . $emoji->name;
     }
 }
 
@@ -701,7 +697,6 @@ sub _set_guild_members
         my $user_hash = $member_hash->{'user'};
         my $user = $self->add_user($user_hash);
         
-        #say "\tHas Member: " . $member->id . " -> " . $user->username;
     }
 }
 
@@ -761,9 +756,6 @@ sub dispatch_guild_update
 {
     my ($self, $hash) = @_;
 
-    #say Dumper($hash);
-    say "Guild Update:";
-
     my $gid = $hash->{'id'}; # Guild ID
     my $guild = $self->guilds->{$gid}; # Guild object
 
@@ -775,7 +767,7 @@ sub dispatch_guild_delete
 {
     my ($self, $hash) = @_;
 
-    say Dumper($hash);
+    # say Dumper($hash);
 
     # Probably just passes an ID, then find and delete that guild object.
 }
@@ -784,7 +776,7 @@ sub dispatch_guild_member_add
 {
     my ($self, $hash) = @_;
 
-    say Dumper($hash);
+    # say Dumper($hash);
 
     # Should be able to just call self->set_members.... or guild->add_member
 }
@@ -793,7 +785,7 @@ sub dispatch_guild_member_update
 {
     my ($self, $hash) = @_;
 
-    say Dumper($hash);
+    # say Dumper($hash);
 
 }
 
@@ -801,15 +793,15 @@ sub dispatch_guild_member_remove
 {
     my ($self, $hash) = @_;
 
-    say Dumper($hash);
+    # say Dumper($hash);
 }
 
 sub dispatch_guild_members_chunk
 {
     my ($self, $hash) = @_;
 
-    say Dumper($hash);
-}
+    #  say Dumper($hash);
+} 
 
 sub dispatch_guild_emojis_update{}
 sub dispatch_guild_role_create{}
@@ -885,7 +877,7 @@ sub on_hello
             my $d = $self->s;
             $self->log->debug('[Gateway.pm] [on_hello] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
             $self->heartbeat_check($self->heartbeat_check+1);
-            send_op($self, $op, $d);
+            $self->send_op($op, $d);
         }
     ));
 }

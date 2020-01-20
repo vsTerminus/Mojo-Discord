@@ -6,9 +6,9 @@ our $VERSION = '0.001';
 use Moo;
 use strictures 2;
 
-use Mojo::Log;
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
+use Mojo::Log;
 use Data::Dumper;
 
 use namespace::clean;
@@ -29,7 +29,7 @@ has channels    => ( is => 'rw' );
 has log         => ( is => 'rwp' );
 has logdir      => ( is => 'rw', default => '/var/log/mojo-discord' );
 has logfile     => ( is => 'rw', default => 'mojo-discord.log' );
-has loglevel    => ( is => 'rw', default => 'info' );
+has loglevel    => ( is => 'rw', default => 'debug' );
 
 sub init
 {

@@ -9,7 +9,8 @@ use Mojo::Discord::Guild::Role;
 use Mojo::Discord::Guild::Channel;
 use Mojo::Discord::Guild::Emoji;
 use Mojo::Discord::Guild::Presence;
-use Data::Dumper;
+
+use namespace::clean;
 
 has id                              => ( is => 'rw' );
 has members                         => ( is => 'rw', default => sub { {} } );
