@@ -1,10 +1,12 @@
 package Mojo::Discord;
+
 use feature 'say';
 our $VERSION = '0.001';
 
 use Moo;
 use strictures 2;
 
+use Mojo::Log;
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
 use Data::Dumper;
@@ -24,9 +26,18 @@ has rest        => ( is => 'rw' );
 has guilds      => ( is => 'rw' );
 has channels    => ( is => 'rw' );
 
+# Logging
+has log         => ( is => 'rwp' );
+has logdir      => ( is => 'rw', default => '/var/log/mojo-discord' );
+has logfile     => ( is => 'rw', default => 'mojo-discord.log' );
+has loglevel    => ( is => 'rw', default => 'info' );
+
 sub init
 {
     my $self = shift;
+
+    $self->_set_log( Mojo::Log->new( path => $self->logdir . '/' . $self->logfile, level => $self->loglevel ) );
+    $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
 
     $self->guilds({});
     $self->channels({});
@@ -37,6 +48,7 @@ sub init
         'url'           => $self->url,
         'version'       => $self->version,
         'verbose'       => $self->verbose,
+        'log'           => $self->log,
     ));
 
     $self->gw(Mojo::Discord::Gateway->new(
@@ -48,6 +60,7 @@ sub init
         'reconnect'     => $self->reconnect,
         'callbacks'     => $self->callbacks,
         'base_url'      => $self->base_url,
+        'log'           => $self->log,
     ));
 
     # Give the gateway object access to the REST object.
@@ -193,9 +206,6 @@ sub get_cached_webhooks
 
     return $self->gw->webhooks->{$channel};
 }
-
-
-__PACKAGE__->meta->make_immutable;
 
 1;
 

@@ -138,6 +138,7 @@ has channels            => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
 has webhooks            => ( is => 'rw', default => sub { {} } );
 has rest                => ( is => 'rw' );
+has log                 => ( is => 'ro' );
 
 sub BUILD
 { 
@@ -175,6 +176,8 @@ sub status_update
     $d->{'game'}{'state'} = $param->{'state'} // undef;
     $d->{'status'} = $param->{'status'} // "online";
 
+    $self->log->debug("[Gateway.pm] [status_update] Updated own status: " . $d->{'game'}{'name'});
+    $self->log->debug(Data::Dumper->Dump([$d], [qw(d)]));
     $self->send_op($op, $d);
 }
 
@@ -193,10 +196,12 @@ sub gateway
     }
     else
     {
-        say Dumper($tx->res->error);
+        $self->log->error("[Gateway.pm] [gateway] Could not retrieve Gateway URL from '$url'");
+        $self->log->debug(Data::Dumper->Dump([$tx->res->error], ['error']));
         die("Could not retrieve Gateway URL from '$url'");
     }
 
+    $self->log->debug("[Gateway.pm] [gateway] Gateway URL: " . $tx->res->json->{'url'});
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
 }
 
@@ -211,13 +216,13 @@ sub send_op
 
     if ( !defined $tx ) 
     {
-        say localtime(time) . " (send_op) \$tx is undefined. Closing connection with Code 4009: Timeout";
+        $self->log->error('[Gateway.pm] [send_op] $tx is undefined. Closing connection with code 4009: Timeout');
         $self->on_finish($tx, 4009, "Connection Timeout");
         return;
     }
     elsif ( $self->heartbeat_check > 1 ) 
     {
-        say localtime(time) . " (send_op) Failed heartbeat check. Closing connection with Code 4009: Heartbeat Failure";
+        $self->log->error('[Gateway.pm] [send_op] Failed heartbeat check. Closing connection with code 4009: Heartbeat Failure');
         $self->on_finish($tx, 4009, "Timeout: Heartbeat Failure");
         return;
     } 
@@ -242,8 +247,7 @@ sub send_op
         convert_blessed => 1
         )->encode($package);
 
-    say localtime(time) . " " . $json if $self->verbose;
-
+    $self->log->debug("[Gateway.pm] [send_op] Sent: \n\t" . Data::Dumper->Dump([$package], ['package']));
     $tx->send($json);
 }
 
@@ -252,6 +256,7 @@ sub gw_resume
 {
     my ($self) = @_;
 
+    $self->log->info('[Gateway.pm] [gw_resume] Reconnecting');
     $self->gw_connect($self->gateway(), 1);
 }
 
@@ -267,15 +272,15 @@ sub gw_connect
     # Add URL Params 
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
 
-    say localtime(time) . ' Connecting to ' . $url if $self->verbose;
+    $self->log->info('[Gateway.pm] [gw_connect] Connecting to ' . $url);
 
     $ua->websocket($url => sub {
         my ($ua, $tx) = @_;
         unless ($tx->is_websocket)
         {
             $self->on_finish(-1, 'Websocket Handshake Failed');
-#            $self->{'tx'} = undef;
-#            say localtime(time) . ' WebSocket handshake failed!';
+            $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
+            $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
             return;
         }
 
@@ -285,7 +290,7 @@ sub gw_connect
         # We can up the length here or by setting the MOJO_MAX_WEBSOCKET_SIZE environment variable.
         $tx->max_websocket_size($self->max_websocket_size);
     
-        say localtime(time) . ' WebSocket Connection Established.' if $self->verbose;
+        $self->log->info('[Gateway.pm] [gw_connect] WebSocket Connection Established');
         $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
         $self->tx($tx);
     
@@ -323,7 +328,7 @@ sub gw_disconnect
     $reason = "No reason specified." unless defined $reason;
 
     my $tx = $self->tx;
-    say localtime(time) . " (gw_disconnect) Closing Websocket: $reason" if $self->verbose;
+    $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
     defined $tx ? $tx->finish : $self->on_finish($tx, 9001, $reason);
 }
 
@@ -336,7 +341,8 @@ sub on_finish
 
     $reason = $close->{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close->{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
-    say localtime(time) . " (on_finish) Websocket Connection Closed with Code $code ($reason)" if $self->verbose;
+    $self->log->info('[Gateway.pm] [on_finish] Websocket connection closed with Code ' . $code . ' (' . $reason . ')');
+    $self->log->debug('[Gateway.pm] [on_finish] ' . Data::Dumper->Dump([$tx], ['tx']));
 
     $self->connected(0);
 
@@ -368,8 +374,6 @@ sub on_finish
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'FINISH'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'FINISH'};
     
-    say "Is finished? " . $tx->is_finished if $self->verbose;
-
     undef $tx;
     $self->tx(undef);
 
@@ -380,22 +384,22 @@ sub on_finish
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->reconnect )
     {
-        say localtime(time) . " Automatic reconnect is enabled." if $self->verbose;
+        $self->log->debug('[Gateway.pm] [on_finish] Automatic reconnect is enabled.');
 
         if ( $self->allow_resume )
         {
-            say localtime(time) . " Reconnecting and resuming previous session in 10 seconds..." if $self->verbose;
+            $self->log->info('[Gateway.pm] [on_finish] Reconnecting and resuming previous session.');
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
-            say localtime(time) . " Reconnecting and starting a new session in 10 seconds..." if $self->verbose;
+            $self->log->info('[Gateway.pm] [on_finish] Reconnecting and starting a new session.');
             Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway()) });
         }
     }
     else
     {
-        say localtime(time) . " Automatic Reconnect is disabled." if $self->verbose;
+        $self->log->info('[Gateway.pm] [on_finish] Automatic reconnect is disabled.');
     }
 }
 
@@ -424,8 +428,6 @@ sub on_message
     }
 }
 
-
-
 # This one is easy. $msg comes in as a perl hash already, so all we do is pass it on to handle_event as-is.
 sub on_json
 {
@@ -447,34 +449,33 @@ sub handle_event
     $op_msg .= " SEQ " . $s if defined $s;
     $op_msg .= " " . $t if defined $t;
 
-    say localtime(time) . " " . $op_msg if ($self->verbose);
-            
     $self->s($s) if defined $s;    # Update the latest Sequence Number.
 
-    # Call the relevant handler
     if ( exists $self->handlers->{$op} )
     {
+        $self->log->debug('[Gateway.pm] [handle_event] Handled Event: ' . $op_msg);
         $self->handlers->{$op}->($self, $tx, $hash);
     }
-    # Else - unhandled event
     else
     {
-        #say Dumper($hash);
-        say localtime(time) . ": Unhandled Event: OP $op" if $self->verbose;
+        $self->log->debug('[Gateway.pm] [handle_event] Unhandled Event: ' . $op_msg);
+        $self->log->debug('[Gateway.pm] [handle_event] Unhandled Event: ' . Data::Dumper->Dump([$hash], ['hash']));
     }
 }
 
+# Dispatch sends events to the client's listener functions if defined
 sub dispatch
 {
     my ($self, $type, $data) = @_;
 
     if ( exists $self->dispatches->{$type} )
     {
+        $self->log->debug('[Gateway.pm] [dispatch] Dispatching event: ' . $type);
         $self->dispatches->{$type}->($self, $data);
     }
     else
     {
-        say localtime(time) . ": Unhandled Dispatch Event: $type" if $self->verbose;
+        $self->log->debug('[Gateway.pm] [dispatch] Unhandled dispatch event: ' . $type);
     }
 }
 
@@ -497,7 +498,7 @@ sub send_ident
         "large_threshold" => 50
     };
 
-    say localtime(time) . " OP 2 SEQ 0 IDENTIFY" if $self->verbose;
+    $self->log->debug('[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY');
     send_op($self, $op, $d);
 }
 
@@ -514,7 +515,7 @@ sub send_resume
         "seq"           => $self->s
     };
 
-    say localtime(time) . " OP $op SEQ $s RESUME" if $self->verbose;
+    $self->log->debug('[Gateway.pm] [send_resume] Sending OP $op SEQ $s RESUME');
     send_op($self, $op, $d);
 }
 
@@ -554,6 +555,9 @@ sub on_dispatch # OPCODE 0
 
 sub dispatch_ready
 {
+    my $self = shift;
+
+    $self->log->info('[Gateway.pm] [dispatch_ready] Discord gateway is ready');
 }
 
 sub dispatch_typing_start
@@ -891,7 +895,5 @@ sub on_heartbeat_ack
     say localtime(time) . " OP 11 SEQ " . $self->s . " HEARTBEAT ACK" if $self->verbose;
     $self->heartbeat_check($self->heartbeat_check-1);
 }
-
-__PACKAGE__->meta->make_immutable;
 
 1;
