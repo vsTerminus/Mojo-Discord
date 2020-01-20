@@ -111,7 +111,6 @@ has name                => ( is => 'rw', required => 1 );
 has url                 => ( is => 'rw', required => 1 );
 has version             => ( is => 'ro', required => 1 );
 has callbacks           => ( is => 'rw' );
-has verbose             => ( is => 'rw' );
 has reconnect           => ( is => 'rw' );
 has id                  => ( is => 'rw' );
 has username            => ( is => 'rw' );
@@ -348,10 +347,11 @@ sub on_finish
 
     if ( !defined $tx )
     {
-        say localtime(time) . " (on_finish) \$tx is unexpectedly undefined." if $self->verbose;
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is unexpectedly undefined');
     }
     elsif ( !$tx->is_finished )
     {
+        $self->log->debug('[Gateway.pm] [on_finish] Calling $tx->finish');
         $tx->finish;
     }
 
@@ -361,11 +361,11 @@ sub on_finish
     # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
     if ( !defined $self->heartbeat_loop)
     {
-        say localtime(time) . " (on_finish) Heartbeat Loop variable is unexpectedly undefined.";
+        $self->log->debug('[Gateway.pm] [on_finish] Heartbeat loop variable is unexpectedly undefined');
     }
     else
     {
-        say localtime(time) . " Removing Heartbeat Timer" if $self->verbose;
+        $self->log->debug('[Gateway.pm] [on_finish] Removing heartbeat timer');
         Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
         undef $self->{'heartbeat_loop'};
     }
@@ -528,14 +528,16 @@ sub callback
     if ( !defined $event )
     {
         say localtime(time) . ": No event defined for callback";
+        $self->log->warn('[Gateway.pm] [callback] Undefined event: ' . $event);
     }
     elsif ( exists $callbacks->{$event} )
     {
+        $self->log->debug('[Gateway.pm] [callback] Callback is defined for event: ' . $event);
         $callbacks->{$event}->($hash);
     }
     else
     {
-        say localtime(time) . ": No callback defined for event '$event'" if $self->verbose;
+        $self->log->warn('[Gateway.pm] [callback] Undefined callback for event: ' . $event);
     }
 }
 
@@ -881,7 +883,7 @@ sub on_hello
         sub {
             my $op = 1;
             my $d = $self->s;
-            say localtime(time) . " OP 1 SEQ " . $self->s . " HEARTBEAT" if $self->verbose;
+            $self->log->debug('[Gateway.pm] [on_hello] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
             $self->heartbeat_check($self->heartbeat_check+1);
             send_op($self, $op, $d);
         }
@@ -892,7 +894,7 @@ sub on_heartbeat_ack
 {
     my ($self, $tx, $hash) = @_;
 
-    say localtime(time) . " OP 11 SEQ " . $self->s . " HEARTBEAT ACK" if $self->verbose;
+    $self->log->debug('[Gateway.pm] [on_heartbeat_ack] Received OP 11 SEQ ' . $self->s . ' HEARTBEAT ACK');
     $self->heartbeat_check($self->heartbeat_check-1);
 }
 

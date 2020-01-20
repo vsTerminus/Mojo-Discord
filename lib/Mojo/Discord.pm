@@ -17,7 +17,6 @@ has token       => ( is => 'rw' );
 has name        => ( is => 'rw' );
 has url         => ( is => 'rw' );
 has version     => ( is => 'rw' );
-has verbose     => ( is => 'rw' );
 has reconnect   => ( is => 'rw' );
 has callbacks   => ( is => 'rw' );
 has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
@@ -47,7 +46,6 @@ sub init
         'name'          => $self->name,
         'url'           => $self->url,
         'version'       => $self->version,
-        'verbose'       => $self->verbose,
         'log'           => $self->log,
     ));
 
@@ -56,7 +54,6 @@ sub init
         'name'          => $self->name,
         'url'           => $self->url,
         'version'       => $self->version,
-        'verbose'       => $self->verbose,
         'reconnect'     => $self->reconnect,
         'callbacks'     => $self->callbacks,
         'base_url'      => $self->base_url,
