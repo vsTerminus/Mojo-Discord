@@ -227,13 +227,13 @@ sub send_op
     if ( !defined $tx ) 
     {
         $self->log->error('[Gateway.pm] [send_op] $tx is undefined. Closing connection with code 4009: Timeout');
-        $self->on_finish($tx, 4009, "Connection Timeout");
+        $self->on_finish(4009, "Connection Timeout");
         return;
     }
     elsif ( $self->heartbeat_check > 1 ) 
     {
         $self->log->error('[Gateway.pm] [send_op] Failed heartbeat check. Closing connection with code 4009: Heartbeat Failure');
-        $self->on_finish($tx, 4009, "Timeout: Heartbeat Failure");
+        $self->on_finish(4009, "Timeout: Heartbeat Failure");
         return;
     } 
 
@@ -282,7 +282,7 @@ sub gw_connect
         {
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
-            $self->on_finish(-1, 'Websocket Handshake Failed');
+            $self->on_finish('Websocket Handshake Failed');
             return;
         }
 
@@ -306,7 +306,7 @@ sub gw_connect
         # This should fire if the websocket closes for any reason.
         $tx->on(finish => sub {
             my ($tx, $code, $reason) = @_;
-            $self->on_finish($tx, $code, $reason);
+            $self->on_finish($code, $reason);
         }); 
     
         $tx->on(json => sub {
@@ -331,34 +331,31 @@ sub gw_disconnect
 
     my $tx = $self->tx;
     $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    defined $tx ? $tx->finish : $self->on_finish($tx, 9001, $reason);
+    defined $tx ? $tx->finish : $self->on_finish(9001, $reason);
 }
 
 # Finish the $tx if the connection is closed
 sub on_finish
 {
-    my ($self, $tx, $code, $reason) = @_;
+    my ($self, $code, $reason) = @_;
     my $callbacks = $self->callbacks;
     my $close = $self->close;
 
     $reason = $close->{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close->{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
     $self->log->info('[Gateway.pm] [on_finish] Websocket connection closed with Code ' . $code . ' (' . $reason . ')');
-    $self->log->debug('[Gateway.pm] [on_finish] ' . Data::Dumper->Dump([$tx], ['tx']));
+    $self->log->debug('[Gateway.pm] [on_finish] ' . Data::Dumper->Dump([$self->tx], ['tx']));
 
     $self->connected(0);
 
-    if ( !defined $tx )
+    if ( defined $self->tx )
     {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is unexpectedly undefined');
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined and finished, closing connection.');
+        $self->tx->finish;
+        $self->tx->close;
+        $self->tx(undef);
     }
-    elsif ( !$tx->is_finished )
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] Calling $tx->finish');
-        $tx->finish;
-    }
-
-
+    
     # Remove the heartbeat timer loop
     # The problem seems to be removing this if $tx goes away on its own.
     # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
@@ -373,13 +370,9 @@ sub on_finish
         undef $self->{'heartbeat_loop'};
     }
 
-
     # Send the code and reason to the on_finish callback, if the user defined one.
     $callbacks->{'FINISH'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'FINISH'};
     
-    undef $tx;
-    $self->tx(undef);
-
     # Block reconnect for specific codes.
     my $no_resume = $self->no_resume;
     $self->allow_resume(0) if exists $no_resume->{$code};
@@ -392,13 +385,14 @@ sub on_finish
         if ( $self->allow_resume )
         {
             $self->log->info('[Gateway.pm] [on_finish] Reconnecting and resuming previous session.');
-            Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway(), 1) });
+            Mojo::IOLoop->timer(30 => sub { $self->gw_connect($self->gateway(), 1) });
         }
         else
         {
             $self->log->info('[Gateway.pm] [on_finish] Reconnecting and starting a new session.');
-            Mojo::IOLoop->timer(10 => sub { $self->gw_connect($self->gateway()) });
+            Mojo::IOLoop->timer(30 => sub { $self->gw_connect($self->gateway()) });
         }
+        $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
     }
     else
     {
