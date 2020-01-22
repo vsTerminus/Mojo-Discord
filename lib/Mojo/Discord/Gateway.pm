@@ -6,6 +6,7 @@ use Moo;
 use strictures 2;
 
 extends 'Mojo::Discord';
+with 'Role::EventEmitter';
 
 use Mojo::UserAgent;
 use JSON::MaybeXS;
@@ -520,18 +521,7 @@ sub callback
     my ($self, $event, $hash) = @_;
     my $callbacks = $self->callbacks;
 
-    if ( !defined $event )
-    {
-        $self->log->warn('[Gateway.pm] [callback] event is undefined');
-    }
-    elsif ( exists $callbacks->{$event} )
-    {
-        $callbacks->{$event}->($hash);
-    }
-    else
-    {
-        $self->log->warn('[Gateway.pm] [callback] Undefined callback for event: ' . $event);
-    }
+    $self->emit($event, $hash);
 }
 
 sub on_dispatch # OPCODE 0
