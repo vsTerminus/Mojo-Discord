@@ -1,21 +1,67 @@
 package Mojo::Discord;
 
+use feature 'say';
 our $VERSION = '0.001';
 
-use Mojo::Base -base;
+use Moo;
+use strictures 2;
 
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
+use Mojo::Log;
 use Data::Dumper;
 
-has ['token', 'name', 'url', 'version', 'verbose', 'reconnect', 'timeout', 'callbacks'];
-has base_url    => 'https://discordapp.com/api';
-has gw          => sub { Mojo::Discord::Gateway->new(shift) };
-has rest        => sub { Mojo::Discord::REST->new(shift) };
+use namespace::clean;
+
+has token       => ( is => 'rw' );
+has name        => ( is => 'rw' );
+has url         => ( is => 'rw' );
+has version     => ( is => 'rw' );
+has reconnect   => ( is => 'rw' );
+has callbacks   => ( is => 'rw' );
+has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
+has gw          => ( is => 'rw' );
+has rest        => ( is => 'rw' );
+has guilds      => ( is => 'rw' );
+has channels    => ( is => 'rw' );
+
+# Logging
+has log         => ( is => 'rwp' );
+has logdir      => ( is => 'rw', default => '/var/log/mojo-discord' );
+has logfile     => ( is => 'rw', default => 'mojo-discord.log' );
+has loglevel    => ( is => 'rw', default => 'debug' );
 
 sub init
 {
     my $self = shift;
+
+    $self->_set_log( Mojo::Log->new( path => $self->logdir . '/' . $self->logfile, level => $self->loglevel ) );
+    $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
+
+    $self->guilds({});
+    $self->channels({});
+
+    $self->rest(Mojo::Discord::REST->new(
+        'token'         => $self->token,
+        'name'          => $self->name,
+        'url'           => $self->url,
+        'version'       => $self->version,
+        'log'           => $self->log,
+    ));
+
+    $self->gw(Mojo::Discord::Gateway->new(
+        'token'         => $self->token,
+        'name'          => $self->name,
+        'url'           => $self->url,
+        'version'       => $self->version,
+        'reconnect'     => $self->reconnect,
+        'callbacks'     => $self->callbacks,
+        'base_url'      => $self->base_url,
+        'log'           => $self->log,
+    ));
+
+    # Give the gateway object access to the REST object.
+    $self->gw->rest($self->rest);
 
     # Get Gateway URL
     my $gw_url = $self->gw->gateway;
@@ -27,7 +73,6 @@ sub init
 sub connected
 {
     my $self = shift;
-
     return $self->gw->connected;
 }
 
@@ -48,11 +93,27 @@ sub disconnect
     $self->gw->gw_disconnect($reason);
 }
 
+sub add_user
+{
+    my ($self, $id) = @_;
+
+    $self->gw->add_user({ id => $id })
+}
+
 sub get_user
 {
     my ($self, $id, $callback) = @_;
 
-    $self->rest->get_user($id, $callback);
+    if ( exists $self->gw->users->{$id} )
+    {
+        $callback ? $callback->( $self->gw->users->{$id} ) : return $self->gw->users->{$id};
+    }
+    else
+    {
+        # If we don't have the user stored already then use REST to look them up.
+        # todo, make this also return a User hash object instead of JSON.
+        $self->rest->get_user($id, $callback);
+    }
 }
 
 sub get_guilds
@@ -141,6 +202,14 @@ sub get_guild_webhooks
     $self->rest->get_guild_webhooks($guild, $callback);
 }
 
+# Only get cached webhooks, do not fetch from REST API
+sub get_cached_webhooks
+{
+    my ($self, $channel) = @_;
+
+    return $self->gw->webhooks->{$channel};
+}
+
 1;
 
 =head1 NAME
@@ -164,6 +233,22 @@ Note: This module implements only a subset of the available API calls. Additiona
 =head1 ATTRIBUTES
 
 L<Mojo::Discord> implements the following attributes
+
+=head2 init()
+
+Request the websocket Gateway URL and then establish a new websocket connection to that URL
+
+=head2 resume()
+
+Request the websocket Gateway URL and resume a previous Gateway connection.
+
+The only difference between this and init is that init sends an IDENT packet to start a new connection while this sends a RESUME packet with a sequence number which triggers Discord to re-send everything the bot missed since that sequence number.
+
+=head2 disconnect($reason)
+
+Close the websocket connection, optionally specify a reason as a string parameter.
+
+=head2
 
 =head1 BUGS
 
