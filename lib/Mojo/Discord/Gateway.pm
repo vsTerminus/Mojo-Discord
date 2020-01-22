@@ -450,13 +450,12 @@ sub handle_event
 
     if ( exists $self->handlers->{$op} )
     {
-        $self->log->debug('[Gateway.pm] [handle_event] Handled Event: ' . $op_msg);
         $self->handlers->{$op}->($self, $tx, $hash);
     }
     else
     {
-        $self->log->debug('[Gateway.pm] [handle_event] Unhandled Event: ' . $op_msg);
-        $self->log->debug('[Gateway.pm] [handle_event] Unhandled Event: ' . Data::Dumper->Dump([$hash], ['hash']));
+        $self->log->warn('[Gateway.pm] [handle_event] Unhandled Event: ' . $op_msg);
+        $self->log->warn('[Gateway.pm] [handle_event] Unhandled Event: ' . Data::Dumper->Dump([$hash], ['hash']));
     }
 }
 
@@ -467,7 +466,6 @@ sub dispatch
 
     if ( exists $self->dispatches->{$type} )
     {
-        $self->log->debug('[Gateway.pm] [dispatch] Dispatching event: ' . $type);
         $self->dispatches->{$type}->($self, $data);
     }
     else
@@ -528,7 +526,6 @@ sub callback
     }
     elsif ( exists $callbacks->{$event} )
     {
-        $self->log->debug('[Gateway.pm] [callback] Callback is defined for event: ' . $event);
         $callbacks->{$event}->($hash);
     }
     else
