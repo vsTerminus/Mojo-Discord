@@ -10,3 +10,4 @@ requires 'Compress::Zlib';
 requires 'Encode::Guess';
 requires 'Data::Dumper';
 requires 'IO::Socket::SSL';
+requires 'Role::EventEmitter';
