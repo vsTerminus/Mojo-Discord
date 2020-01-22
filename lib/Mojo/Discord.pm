@@ -20,13 +20,38 @@ has version     => ( is => 'rw' );
 has reconnect   => ( is => 'rw' );
 has callbacks   => ( is => 'rw' );
 has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
-has gw          => ( is => 'rw' );
-has rest        => ( is => 'rw' );
-has guilds      => ( is => 'rw' );
-has channels    => ( is => 'rw' );
+has gw          => ( is => 'lazy', builder => sub {
+                    my $self = shift;
+                    Mojo::Discord::Gateway->new(
+                        'token'         => $self->token,
+                        'name'          => $self->name,
+                        'url'           => $self->url,
+                        'version'       => $self->version,
+                        'reconnect'     => $self->reconnect,
+                        'callbacks'     => $self->callbacks,
+                        'base_url'      => $self->base_url,
+                        'log'           => $self->log,
+                        'rest'          => $self->rest,
+                    )});
+has rest        => ( is => 'lazy', builder => sub {
+                    my $self = shift;
+                    Mojo::Discord::REST->new(
+                        'token'         => $self->token,
+                        'name'          => $self->name,
+                        'url'           => $self->url,
+                        'version'       => $self->version,
+                        'log'           => $self->log,
+                    )});
+has guilds      => ( is => 'rw', default => sub { {} } );
+has channels    => ( is => 'rw', default => sub { {} } );
 
 # Logging
-has log         => ( is => 'rwp' );
+has log         => ( is => 'lazy', builder => sub { 
+                    my $self = shift;
+                    Mojo::Log->new( 
+                        path => $self->logdir . '/' . $self->logfile, 
+                        level => $self->loglevel 
+                    )});
 has logdir      => ( is => 'rw', default => '/var/log/mojo-discord' );
 has logfile     => ( is => 'rw', default => 'mojo-discord.log' );
 has loglevel    => ( is => 'rw', default => 'debug' );
@@ -34,34 +59,7 @@ has loglevel    => ( is => 'rw', default => 'debug' );
 sub init
 {
     my $self = shift;
-
-    $self->_set_log( Mojo::Log->new( path => $self->logdir . '/' . $self->logfile, level => $self->loglevel ) );
     $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
-
-    $self->guilds({});
-    $self->channels({});
-
-    $self->rest(Mojo::Discord::REST->new(
-        'token'         => $self->token,
-        'name'          => $self->name,
-        'url'           => $self->url,
-        'version'       => $self->version,
-        'log'           => $self->log,
-    ));
-
-    $self->gw(Mojo::Discord::Gateway->new(
-        'token'         => $self->token,
-        'name'          => $self->name,
-        'url'           => $self->url,
-        'version'       => $self->version,
-        'reconnect'     => $self->reconnect,
-        'callbacks'     => $self->callbacks,
-        'base_url'      => $self->base_url,
-        'log'           => $self->log,
-    ));
-
-    # Give the gateway object access to the REST object.
-    $self->gw->rest($self->rest);
 
     # Get Gateway URL
     my $gw_url = $self->gw->gateway;
