@@ -353,7 +353,6 @@ sub on_finish
     {
         $self->log->debug('[Gateway.pm] [on_finish] $tx is defined and finished, closing connection.');
         $self->tx->finish;
-        $self->tx->close;
         $self->tx(undef);
     }
     
