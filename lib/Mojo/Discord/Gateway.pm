@@ -348,15 +348,23 @@ sub on_finish
 
     $self->connected(0);
 
-    if ( defined $self->tx )
+    if ( defined $self->tx and $self->tx->is_websocket)
     {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined');
-        $self->tx->finish;  # Close $tx gracefully
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is a websocket');
+        $self->tx->finish if $self->tx->established;
         $self->log->debug('[Gateway.pm] [on_finish] $tx is finished');
         $self->tx->closed;
         $self->log->debug('[Gateway.pm] [on_finish] $tx is closed');
         $self->tx(undef);
         $self->log->debug('[Gateway.pm] [on_finish] $tx is undefined');
+    }
+    elsif ( defined $self->tx )
+    {
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined but is not a websocket');
+    }
+    else
+    {
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is not defined');
     }
     
     # Remove the heartbeat timer loop
