@@ -332,15 +332,14 @@ sub gw_disconnect
 
     my $tx = $self->tx;
     $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    defined $tx ? $tx->finish : $self->on_finish(9001, $reason);
+    $self->on_finish(9001, $reason);
 }
 
 # Finish the $tx if the connection is closed
 sub on_finish
 {
     my ($self, $code, $reason) = @_;
-    my $callbacks = $self->callbacks;
-    my $close = $self->close;
+    my $close = $self->close; # Close codes
 
     $reason = $close->{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close->{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
@@ -351,9 +350,13 @@ sub on_finish
 
     if ( defined $self->tx )
     {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined and finished, closing connection.');
-        $self->tx->finish;
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined');
+        $self->tx->finish;  # Close $tx gracefully
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is finished');
+        $self->tx->closed;
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is closed');
         $self->tx(undef);
+        $self->log->debug('[Gateway.pm] [on_finish] $tx is undefined');
     }
     
     # Remove the heartbeat timer loop
@@ -370,9 +373,6 @@ sub on_finish
         undef $self->{'heartbeat_loop'};
     }
 
-    # Send the code and reason to the on_finish callback, if the user defined one.
-    $callbacks->{'FINISH'}->({'code' => $code, 'reason' => $reason}) if exists $callbacks->{'FINISH'};
-    
     # Block reconnect for specific codes.
     my $no_resume = $self->no_resume;
     $self->allow_resume(0) if exists $no_resume->{$code};
