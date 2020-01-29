@@ -27,7 +27,7 @@ has gw          => ( is => 'lazy', builder => sub {
                         'name'          => $self->name,
                         'url'           => $self->url,
                         'version'       => $self->version,
-                        'reconnect'     => $self->reconnect,
+                        'auto_reconnect'=> $self->reconnect,
                         'callbacks'     => $self->callbacks,
                         'base_url'      => $self->base_url,
                         'log'           => $self->log,
@@ -60,12 +60,7 @@ sub init
 {
     my $self = shift;
     $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
-
-    # Get Gateway URL
-    my $gw_url = $self->gw->gateway;
-
-    # Set up connection
-    $self->gw->gw_connect($gw_url);
+    $self->gw->gw_connect();
 }
 
 sub connected
@@ -77,11 +72,8 @@ sub connected
 sub resume
 {
     my $self = shift;
-
-    # Get Gateway URL
-    my $gw_url = $self->{'gw'}->gateway;
-
-    $self->gw->gw_resume($gw_url);
+    $self->log->info('[Discord.pm] [init] Reconnecting and resuming previous session');
+    $self->gw->gw_resume('resume' => 1);
 }
 
 sub disconnect

@@ -60,7 +60,7 @@ has dispatches => ( is => 'ro', default => sub {
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
 # Also includes some Discord-specific codes from the Discord API Reference Docs (Starting at 4000)
-has close => ( is => 'ro', default => sub {
+has close_codes => ( is => 'ro', default => sub {
     {
         '1000'  => 'Normal Closure',
         '1001'  => 'Going Away',
@@ -110,8 +110,7 @@ has token               => ( is => 'ro' );
 has name                => ( is => 'rw', required => 1 );
 has url                 => ( is => 'rw', required => 1 );
 has version             => ( is => 'ro', required => 1 );
-has callbacks           => ( is => 'rw' );
-has reconnect           => ( is => 'rw' );
+has auto_reconnect      => ( is => 'rw' );
 has id                  => ( is => 'rw' );
 has username            => ( is => 'rw' );
 has avatar              => ( is => 'rw' );
@@ -122,38 +121,38 @@ has websocket_url       => ( is => 'rw' );
 has tx                  => ( is => 'rw' );
 has heartbeat_interval  => ( is => 'rw' );
 has heartbeat_loop      => ( is => 'rw' );
-has heartbeat_check     => ( is => 'rw', default => 0 );
-has connected           => ( is => 'rw', default => 0 );
+has heartbeat           => ( is => 'rw', default => 2 );
 has base_url            => ( is => 'ro', default => 'https://discordapp.com/api' );
 has gateway_url         => ( is => 'rw', default => sub { shift->base_url . '/gateway' });
 has gateway_version     => ( is => 'ro', default => 6 );
 has gateway_encoding    => ( is => 'ro', default => 'json' );
 has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this maybe be a config.ini value??
-has agent               => ( is => 'rw' );
+has agent               => ( is => 'lazy', builder => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
 has allow_resume        => ( is => 'rw', default => 1 );
-has ua                  => ( is => 'rw', default => sub { Mojo::UserAgent->new->with_roles('+Queued') } );
+has reconnect_timer     => ( is => 'rw', default => 10 );
+has ua                  => ( is => 'lazy', builder => sub { 
+    my $self = shift;
+
+    my $ua = Mojo::UserAgent->new->with_roles('+Queued');
+
+    $ua->transactor->name($self->agent);
+    $ua->inactivity_timeout(120);
+    $ua->connect_timeout(5);
+    $ua->max_active(1);
+
+    $ua->on(start => sub {
+       my ($ua, $tx) = @_;
+       $tx->req->headers->authorization($self->token);
+    });
+
+    return $ua;
+});
 has guilds              => ( is => 'rw', default => sub { {} } );
 has channels            => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
 has webhooks            => ( is => 'rw', default => sub { {} } );
 has rest                => ( is => 'rw' );
 has log                 => ( is => 'ro' );
-
-sub BUILD
-{ 
-    my $self = shift;
-    
-    $self->agent( $self->name . ' (' . $self->url . ',' . $self->version . ')' );
-    
-    $self->ua->transactor->name($self->agent);
-    $self->ua->inactivity_timeout(120);
-    $self->ua->connect_timeout(5);
-    $self->ua->max_active(1);
-    $self->ua->on(start => sub {
-       my ($ua, $tx) = @_;
-       $tx->req->headers->authorization($self->token);
-    });
-}
 
 # This updates the client status
 # Takes a hashref with bare minimum 'name' specified. That is the name of the currently playing game or song or whatever.
@@ -178,7 +177,6 @@ sub status_update
     $d->{'status'} = $param->{'status'} // "online";
 
     $self->log->debug("[Gateway.pm] [status_update] Updated own status: " . $d->{'game'}{'name'});
-    $self->log->debug(Data::Dumper->Dump([$d], [qw(d)]));
     $self->send_op($op, $d);
 }
 
@@ -206,12 +204,55 @@ sub gateway
     return $tx->res->json->{'url'}; # Return the URL field from the JSON response
 }
 
+# Check that we have a valid connection to Discord, return boolean
+sub connected
+{
+    my $self = shift;
+    my $log = $self->log;
+    my $tx = $self->tx;
+
+    unless ( defined $tx )
+    {
+        $log->debug('[Gateway.pm] [connected] $tx is not defined');
+        return 0;
+    }
+
+    unless ( $tx->is_websocket )
+    {
+        $log->debug('[Gateway.pm] [connected] $tx is not a websocket');
+        return 0;
+    }
+
+    if ( $tx->error )
+    {
+        $log->debug('[Gateway.pm] [connected] $tx has an error: ' . $tx->error);
+        return 0;
+    }
+
+    if ( $tx->is_finished )
+    {
+        $log->debug('[Gateway.pm] [connected] $tx is finished');
+        return 0;
+    }
+
+    unless ( $self->heartbeat )
+    {
+        $log->debug('[Gateway.pm] [connected] Heartbeat not present (' . $self->heartbeat . ')');
+        return 0;
+    }
+
+    # If all of the above passes, we should have confidence that we are connected to Discord and can send packets.
+    return 1;
+}
+
 # This sub is used for sending messages to the gateway.
 # It takes an OP code, optional Sequence and Type, and a Data hashref to pass in.
 # The arguments are put together into a hashref and then JSON encoded for delivery over the websocket.
 sub send_op
 {
     my ($self, $op, $d, $s, $t) = @_;
+
+    die ("Cannot send OP - Client is not connected") unless $self->connected();
 
      my $package = {
         'op' => int($op), # Ensure JSON::MaybeXS encodes this as an integer, not a string. Discord will reject string opcodes.
@@ -221,22 +262,9 @@ sub send_op
     $package->{'s'} = $s if defined $s;
     $package->{'t'} = $t if defined $t;
 
-    $self->log->debug('[Gateway.pm] [send_op] Sending Package: ' . Data::Dumper->Dump([$package], ['package']));
+    $self->connected;
 
-     my $tx = $self->tx;
-
-    if ( !defined $tx ) 
-    {
-        $self->log->error('[Gateway.pm] [send_op] $tx is undefined. Closing connection with code 4009: Timeout');
-        $self->on_finish(4009, "Connection Timeout");
-        return;
-    }
-    elsif ( $self->heartbeat_check > 1 ) 
-    {
-        $self->log->error('[Gateway.pm] [send_op] Failed heartbeat check. Closing connection with code 4009: Heartbeat Failure');
-        $self->on_finish(4009, "Timeout: Heartbeat Failure");
-        return;
-    } 
+    my $tx = $self->tx;
 
     # Seems Discord parses JSON incorrectly when it contains unicode
     # JSON::MaybeXS works with the ascii option to escape unicode characters.
@@ -250,7 +278,7 @@ sub send_op
         convert_blessed => 1
         )->encode($package);
 
-    $self->log->debug("[Gateway.pm] [send_op] Sent: \n\t" . Data::Dumper->Dump([$json], ['json']));
+    $self->log->debug("[Gateway.pm] [send_op] Sent: $json");
     $tx->send($json);
 }
 
@@ -260,26 +288,28 @@ sub gw_resume
     my ($self) = @_;
 
     $self->log->info('[Gateway.pm] [gw_resume] Reconnecting');
-    $self->gw_connect($self->gateway(), 1);
-}
+    $self->gw_connect('resume' => 1);
+};
 
 # This sub establishes a connection to the Discord Gateway web socket
 # WS URL must be passed in.
 # Optionally pass in a boolean $reconnect (1 or 0) to tell connect whether to send an IDENTIFY or a RESUME
 sub gw_connect
 {
-    my ($self, $url, $reconnect) = @_;
+    my ($self, %args) = @_;
+    my $resume = $args{'resume'} // 0;
+    $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
-    my $ua = $self->ua;
-
-    # Add URL Params 
+    my $url = $self->gateway();
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
+    $self->log->debug('[Gateway.pm] [gw_connect] Connecting to ' . $url);
 
-    $self->log->info('[Gateway.pm] [gw_connect] Connecting to ' . $url);
-
-    $ua->websocket($url => sub {
+    $self->ua->websocket($url => { 'Sec-WebSocket-Extensions' => 'permessage-deflate' } => sub
+    {
         my ($ua, $tx) = @_;
-        unless ($tx->is_websocket)
+        $self->tx($tx);
+
+        unless ($self->connected)
         {
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
@@ -292,36 +322,36 @@ sub gw_connect
         # connection with code 1009 - Message Too Long.
         # We can up the length here or by setting the MOJO_MAX_WEBSOCKET_SIZE environment variable.
         $tx->max_websocket_size($self->max_websocket_size);
-    
+        
         $self->log->info('[Gateway.pm] [gw_connect] WebSocket Connection Established');
-        $self->heartbeat_check(0); # Always make sure this is set to 0 on a new connection.
-        $self->tx($tx);
-    
+        $self->heartbeat(2); # Always make sure this is set to 2 on a new connection.
+        
         # If this is a new connection, send OP 2 IDENTIFY
         # If we are reconnecting, send OP 6 RESUME
-        (defined $reconnect and $reconnect and $self->allow_resume) ? send_resume($self, $tx) : send_ident($self, $tx);
-    
+        ($resume and $self->auto_reconnect and $self->allow_resume ) ? 
+            send_resume($self, $tx) : send_ident($self, $tx);
+        
         # Reset the state of allow_resume now that we have reconnected.
         $self->allow_resume(1);
-    
+
         # This should fire if the websocket closes for any reason.
-        $tx->on(finish => sub {
+        $self->tx->on(finish => sub {
             my ($tx, $code, $reason) = @_;
             $self->on_finish($code, $reason);
         }); 
-    
-        $tx->on(json => sub {
+        
+        $self->tx->on(json => sub {
             my ($tx, $msg) = @_;
             $self->on_json($tx, $msg);
         });
-    
+        
         # This is the main loop - It handles all incoming messages from the server.
-        $tx->on(message => sub {
+        $self->tx->on(message => sub {
             my ($tx, $msg) = @_;
             $self->on_message($tx, $msg);
-        });        
+        });
     });
-}
+};
 
 # For manually disconnecting the connection
 sub gw_disconnect
@@ -332,75 +362,51 @@ sub gw_disconnect
 
     my $tx = $self->tx;
     $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    $self->on_finish(9001, $reason);
+    $tx->finish;
 }
 
 # Finish the $tx if the connection is closed
 sub on_finish
 {
     my ($self, $code, $reason) = @_;
-    my $close = $self->close; # Close codes
+    my $close = $self->close_codes; # Close codes
+
+    unless (defined $self->tx)
+    {
+        $self->log->fatal('[Gateway.pm] [on_finish] $tx is undefined');
+        die('on_finish has undefined $tx - Cannot recover');
+    }
 
     $reason = $close->{$code} if ( defined $code and (!defined $reason or length $reason == 0) and exists $close->{$code} );
     $reason = "Unknown" unless defined $reason and length $reason > 0;
-    $self->log->info('[Gateway.pm] [on_finish] Websocket connection closed with Code ' . $code . ' (' . $reason . ')');
-    $self->log->debug('[Gateway.pm] [on_finish] ' . Data::Dumper->Dump([$self->tx], ['tx']));
+    $self->log->info('[Gateway.pm] [on_finish] Websocket connection closed with Code ' . Data::Dumper->Dump([$code], ['code']) . ' (' . $reason . ')');
 
-    $self->connected(0);
-
-    if ( defined $self->tx and $self->tx->is_websocket)
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is a websocket');
-        $self->tx->finish if $self->tx->established;
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is finished');
-        $self->tx->closed;
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is closed');
-        $self->tx(undef);
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is undefined');
-    }
-    elsif ( defined $self->tx )
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is defined but is not a websocket');
-    }
-    else
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] $tx is not defined');
-    }
-    
-    # Remove the heartbeat timer loop
-    # The problem seems to be removing this if $tx goes away on its own.
-    # Without being able to call $tx->finish it seems like Mojo::IOLoop->remove doesn't work completely.
-    if ( !defined $self->heartbeat_loop)
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] Heartbeat loop variable is unexpectedly undefined');
-    }
-    else
-    {
-        $self->log->debug('[Gateway.pm] [on_finish] Removing heartbeat timer');
-        Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
-        undef $self->{'heartbeat_loop'};
-    }
+    $self->log->debug('[Gateway.pm] [on_finish] Removing heartbeat timer');
+    Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
+    $self->heartbeat_loop(undef);;
 
     # Block reconnect for specific codes.
     my $no_resume = $self->no_resume;
     $self->allow_resume(0) if exists $no_resume->{$code};
 
     # If configured to reconnect on disconnect automatically, do so.
-    if ( $self->reconnect )
+    if ( $self->auto_reconnect )
     {
         $self->log->debug('[Gateway.pm] [on_finish] Automatic reconnect is enabled.');
 
         if ( $self->allow_resume )
         {
             $self->log->info('[Gateway.pm] [on_finish] Reconnecting and resuming previous session.');
-            Mojo::IOLoop->timer(30 => sub { $self->gw_connect($self->gateway(), 1) });
+            Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 1) });
         }
         else
         {
             $self->log->info('[Gateway.pm] [on_finish] Reconnecting and starting a new session.');
-            Mojo::IOLoop->timer(30 => sub { $self->gw_connect($self->gateway()) });
+            Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
         }
+
         $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
+        $self->log->debug("[Gateway.pm] [on_finish] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
     }
     else
     {
@@ -441,7 +447,7 @@ sub on_json
     $self->handle_event($tx, $msg) if defined $msg;
 }
 
-# on_message and on_json are just going to pass perl hashes to this function, which will store the sequence number, optionally print some info, and then pass the data hash on to the callback function.
+# on_message and on_json are just going to pass perl hashes to this function, which will store the sequence number, optionally print some info, and emit an event
 sub handle_event
 {
     my ($self, $tx, $hash) = @_;
@@ -463,7 +469,6 @@ sub handle_event
     else
     {
         $self->log->warn('[Gateway.pm] [handle_event] Unhandled Event: ' . $op_msg);
-        $self->log->warn('[Gateway.pm] [handle_event] Unhandled Event: ' . Data::Dumper->Dump([$hash], ['hash']));
     }
 }
 
@@ -522,15 +527,6 @@ sub send_resume
     $self->send_op($op, $d);
 }
 
-# Pass a hashref to a callback function if it exists
-sub callback
-{
-    my ($self, $event, $hash) = @_;
-    my $callbacks = $self->callbacks;
-
-    $self->emit($event, $hash);
-}
-
 sub on_dispatch # OPCODE 0
 {
     my ($self, $tx, $hash) = @_;
@@ -538,11 +534,8 @@ sub on_dispatch # OPCODE 0
     my $t = $hash->{'t'};   # Type
     my $d = $hash->{'d'};   # Data
 
-    # Track different information depending on the Dispatch Type
-    $self->dispatch($t, $d);
-
-    # Now send the same information to any user-specified Callbacks
-    $self->callback($t, $d);
+    $self->dispatch($t, $d); # Library's own handlers
+    $self->emit($t, $d);     # Event emitter for client
 }
 
 sub dispatch_ready
@@ -846,16 +839,12 @@ sub on_invalid_session
     my $d = $hash->{'d'};   # Data
  
     $self->allow_resume(0); # Have to establish a new session for this.
-    gw_disconnect($self, "Invalid Session.");
-    $self->callback($t, $d);
+    $self->gw_disconnect("Invalid Session.");
 }
-
 
 sub on_hello
 {
     my ($self, $tx, $hash) = @_;
-
-    $self->connected(1);
 
     # The Hello packet gives us our heartbeat interval, so we can start sending those.
     $self->heartbeat_interval( $hash->{'d'}{'heartbeat_interval'} / 1000 );
@@ -864,7 +853,7 @@ sub on_hello
             my $op = 1;
             my $d = $self->s;
             $self->log->debug('[Gateway.pm] [on_hello] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
-            $self->heartbeat_check($self->heartbeat_check+1);
+            $self->heartbeat($self->heartbeat-1);
             $self->send_op($op, $d);
         }
     ));
@@ -875,7 +864,7 @@ sub on_heartbeat_ack
     my ($self, $tx, $hash) = @_;
 
     $self->log->debug('[Gateway.pm] [on_heartbeat_ack] Received OP 11 SEQ ' . $self->s . ' HEARTBEAT ACK');
-    $self->heartbeat_check($self->heartbeat_check-1);
+    $self->heartbeat($self->heartbeat+1);
 }
 
 1;
