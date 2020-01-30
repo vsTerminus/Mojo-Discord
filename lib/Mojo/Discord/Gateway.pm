@@ -16,6 +16,7 @@ use Mojo::Discord::Guild;
 use Mojo::Discord::REST;
 use Compress::Zlib;
 use Encode::Guess;
+use Time::Duration;
 
 use namespace::clean;
 
@@ -130,6 +131,8 @@ has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this may
 has agent               => ( is => 'lazy', builder => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
 has allow_resume        => ( is => 'rw', default => 1 );
 has reconnect_timer     => ( is => 'rw', default => 10 );
+has last_connected      => ( is => 'rw', default => 0 );
+has last_disconnect     => ( is => 'rw', default => 0 );
 has ua                  => ( is => 'lazy', builder => sub { 
     my $self = shift;
 
@@ -371,6 +374,9 @@ sub on_finish
     my ($self, $code, $reason) = @_;
     my $close = $self->close_codes; # Close codes
 
+    # Track the time we disconnected so we can calculate the connection uptime
+    $self->last_disconnect(time);
+
     unless (defined $self->tx)
     {
         $self->log->fatal('[Gateway.pm] [on_finish] $tx is undefined');
@@ -540,7 +546,20 @@ sub on_dispatch # OPCODE 0
 
 sub dispatch_ready
 {
-    my $self = shift;
+    my ($self, $hash) = @_;
+
+    # Capture the session ID so we can RESUME if we lose connection
+    $self->session_id($hash->{'session_id'});
+    $self->log->debug('[Gateway.pm] [dispatch_ready] Session ID: ' . $self->session_id);
+
+    # Reset reconnect timer if the bot had been connected for at least a minute
+    my $elapsed = $self->last_disconnect - $self->last_connected;
+    $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . duration($elapsed));
+    if ( $elapsed >= 60 )
+    {
+        $self->reconnect_timer(10);
+        $self->last_connected(time);
+    }
 
     $self->log->info('[Gateway.pm] [dispatch_ready] Discord gateway is ready');
 }
