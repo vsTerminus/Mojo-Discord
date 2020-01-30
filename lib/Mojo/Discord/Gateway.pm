@@ -200,7 +200,7 @@ sub gateway
     {
         $self->log->error("[Gateway.pm] [gateway] Could not retrieve Gateway URL from '$url'");
         $self->log->debug(Data::Dumper->Dump([$tx->res->error], ['error']));
-        die("Could not retrieve Gateway URL from '$url'");
+        return undef; 
     }
 
     $self->log->debug("[Gateway.pm] [gateway] Gateway URL: " . $tx->res->json->{'url'});
@@ -304,6 +304,8 @@ sub gw_connect
     $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
     my $url = $self->gateway();
+    $self->reconnect() unless defined $url;
+
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
     $self->log->debug('[Gateway.pm] [gw_connect] Connecting to ' . $url);
 
@@ -395,28 +397,35 @@ sub on_finish
     my $no_resume = $self->no_resume;
     $self->allow_resume(0) if exists $no_resume->{$code};
 
+    $self->reconnect();
+}
+
+sub reconnect
+{
+    my $self = shift;
+
     # If configured to reconnect on disconnect automatically, do so.
     if ( $self->auto_reconnect )
     {
-        $self->log->debug('[Gateway.pm] [on_finish] Automatic reconnect is enabled.');
+        $self->log->debug('[Gateway.pm] [reconnect] Automatic reconnect is enabled.');
 
         if ( $self->allow_resume )
         {
-            $self->log->info('[Gateway.pm] [on_finish] Reconnecting and resuming previous session.');
+            $self->log->info('[Gateway.pm] [reconnect] Reconnecting and resuming previous session.');
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 1) });
         }
         else
         {
-            $self->log->info('[Gateway.pm] [on_finish] Reconnecting and starting a new session.');
+            $self->log->info('[Gateway.pm] [reconnect] Reconnecting and starting a new session.');
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
         }
 
         $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
-        $self->log->debug("[Gateway.pm] [on_finish] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
+        $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
     }
     else
     {
-        $self->log->info('[Gateway.pm] [on_finish] Automatic reconnect is disabled.');
+        $self->log->info('[Gateway.pm] [reconnect] Automatic reconnect is disabled.');
     }
 }
 
