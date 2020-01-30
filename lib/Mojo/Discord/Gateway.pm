@@ -228,7 +228,7 @@ sub connected
 
     if ( $tx->error )
     {
-        $log->debug('[Gateway.pm] [connected] $tx has an error: ' . $tx->error);
+        $log->debug('[Gateway.pm] [connected] $tx has an error: ' . Data::Dumper->Dump([$tx->error], ['error']));
         return 0;
     }
 
