@@ -13,12 +13,11 @@ use Data::Dumper;
 
 use namespace::clean;
 
-has token       => ( is => 'rw' );
-has name        => ( is => 'rw' );
-has url         => ( is => 'rw' );
-has version     => ( is => 'rw' );
-has reconnect   => ( is => 'rw' );
-has callbacks   => ( is => 'rw' );
+has token       => ( is => 'ro' );
+has name        => ( is => 'ro' );
+has url         => ( is => 'ro' );
+has version     => ( is => 'ro' );
+has reconnect   => ( is => 'ro' );
 has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
 has gw          => ( is => 'lazy', builder => sub {
                     my $self = shift;
@@ -28,7 +27,6 @@ has gw          => ( is => 'lazy', builder => sub {
                         'url'           => $self->url,
                         'version'       => $self->version,
                         'auto_reconnect'=> $self->reconnect,
-                        'callbacks'     => $self->callbacks,
                         'base_url'      => $self->base_url,
                         'log'           => $self->log,
                         'rest'          => $self->rest,
@@ -354,21 +352,10 @@ Note: This module implements only a subset of the available API calls. Additiona
 
 =head1 ATTRIBUTES
 
-L<Mojo::Discord> implements the following attributes
+L<Mojo::Discord> has the following attributes
 
-=head2 init()
 
-Request the websocket Gateway URL and then establish a new websocket connection to that URL
 
-=head2 resume()
-
-Request the websocket Gateway URL and resume a previous Gateway connection.
-
-The only difference between this and init is that init sends an IDENT packet to start a new connection while this sends a RESUME packet with a sequence number which triggers Discord to re-send everything the bot missed since that sequence number.
-
-=head2 disconnect($reason)
-
-Close the websocket connection, optionally specify a reason as a string parameter.
 
 =head2
 
