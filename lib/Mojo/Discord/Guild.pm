@@ -79,8 +79,6 @@ sub set_attributes
             $self->{$attr} = $hash->{$attr};
         }
     }
-
-    say "\tJoined Guild: " . $self->{'id'} . " -> " . $self->{'name'};
 }
 
 # Need functions to add, remove, and edit things as they change.
