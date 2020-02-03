@@ -9,6 +9,7 @@ extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
+use URI::Escape;
 use Data::Dumper;
 
 use namespace::clean;
@@ -20,6 +21,7 @@ has 'version'       => ( is => 'ro', required => 1 );
 has 'base_url'      => ( is => 'ro', default => 'https://discordapp.com/api' );
 has 'agent'         => ( is => 'rw' );
 has 'ua'            => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
+has 'log'           => ( is => 'ro' );
 
 sub BUILD
 {
@@ -145,6 +147,48 @@ sub set_topic
         'topic' => $topic
     };
     $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+    {
+        my ($ua, $tx) = @_;
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+# Send "acknowledged" DM 
+# aka, acknowledge a command by adding a :white_check_mark: reaction to it and then send a DM
+# Takes a channel ID and message ID to react to, a user ID to DM, a message to send, and an optional callback sub.
+sub send_ack_dm
+{
+    my ($self, $channel_id, $message_id, $user_id, $message, $callback) = @_;
+
+    $self->rest->add_reaction($channel_id, $message_id, uri_escape_utf8("\x{2705}"));
+    $self->send_dm($user_id, $message, $callback);
+}
+
+# Just a shortcut which handles creating the DM for the caller.
+sub send_dm
+{
+    my ($self, $user, $message, $callback) = @_;
+
+    $self->create_dm($user, sub
+    {
+        my $json = shift;
+        my $dm = $json->{'id'};
+
+        $self->log->debug('[REST.pm] [send_dm] Sending DM to user ID ' . $user . ' in DM ID ' . $dm);
+
+        $self->send_message($dm, $message, $callback);
+    });
+}
+
+sub create_dm
+{
+    my ($self, $id, $callback) = @_;
+
+    my $url = $self->base_url . '/users/@me/channels';
+    my $json = {
+        'recipient_id' => $id
+    };
+    $self->ua->post($url => {Accept => '*/*'} => json => $json => sub
     {
         my ($ua, $tx) = @_;
         $callback->($tx->res->json) if defined $callback;
@@ -310,6 +354,8 @@ sub get_guild_webhooks
 sub add_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    say "Emoji: " . $emoji;
 
     my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
     my $json;

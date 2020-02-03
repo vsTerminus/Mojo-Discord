@@ -90,6 +90,31 @@ sub add_user
     $self->gw->add_user({ id => $id })
 }
 
+sub create_dm
+{
+    my ($self, $id, $callback) = @_;
+
+    $self->rest->create_dm($id, $callback);
+}
+
+# Send "acknowledged" DM 
+# aka, acknowledge a command by adding a :white_check_mark: reaction to it and then send a DM
+# Takes a message ID to react to, a user ID to DM, a message to send, and an optional callback sub.
+sub send_ack_dm
+{
+    my ($self, $message_id, $user_id, $message, $callback) = @_;
+
+    $self->rest->send_ack_dm($message_id, $user_id, $message, $callback);
+}
+
+# Works like send_message, but takes a user ID and creates a DM first.
+sub send_dm
+{
+    my ($self, $id, $message, $callback) = @_;
+
+    $self->rest->send_dm($id, $message, $callback);
+}
+
 sub get_user
 {
     my ($self, $id, $callback) = @_;
@@ -198,6 +223,13 @@ sub get_cached_webhooks
     my ($self, $channel) = @_;
 
     return $self->gw->webhooks->{$channel};
+}
+
+sub add_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    $self->rest->add_reaction($channel, $msgid, $emoji, $callback);
 }
 
 1;
