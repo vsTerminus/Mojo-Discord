@@ -19,24 +19,21 @@ has 'name'          => ( is => 'rw', required => 1 );
 has 'url'           => ( is => 'rw', required => 1 );
 has 'version'       => ( is => 'ro', required => 1 );
 has 'base_url'      => ( is => 'ro', default => 'https://discordapp.com/api' );
-has 'agent'         => ( is => 'rw' );
-has 'ua'            => ( is => 'rw', default => sub { Mojo::UserAgent->new } );
+has 'agent'         => ( is => 'lazy', builder => sub { my $self = shift; return $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
+has 'ua'            => ( is => 'lazy', builder => sub 
+                        { 
+                            my $self = shift;
+                            my $ua = Mojo::UserAgent->new;
+                            $ua->transactor->name($self->agent);
+                            $ua->inactivity_timeout(120);
+                            $ua->connect_timeout(5);
+                            $ua->on(start => sub {
+                                my ($ua, $tx) = @_;
+                                $tx->req->headers->authorization("Bot " . $self->token);
+                            });
+                            return $ua;
+                        });
 has 'log'           => ( is => 'ro' );
-
-sub BUILD
-{
-    my $self = shift;
-
-    $self->agent( $self->name . ' (' . $self->url . ',' . $self->version . ')' );
-
-    $self->ua->transactor->name($self->agent);
-    $self->ua->inactivity_timeout(120);
-    $self->ua->connect_timeout(5);
-    $self->ua->on(start => sub {
-        my ($ua, $tx) = @_;
-        $tx->req->headers->authorization("Bot " . $self->token);
-    });
-}
 
 # send_message will check if it is being passed a hashref or a string.
 # This way it is simple to just send a message by passing in a string, but it can also support things like embeds and the TTS flag when needed.
