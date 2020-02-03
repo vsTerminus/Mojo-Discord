@@ -352,8 +352,6 @@ sub add_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
 
-    say "Emoji: " . $emoji;
-
     my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
     my $json;
     
