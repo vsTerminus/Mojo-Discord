@@ -12,3 +12,4 @@ requires 'Data::Dumper';
 requires 'IO::Socket::SSL';
 requires 'Role::EventEmitter';
 requires 'Time::Duration';
+requires 'URI::Escape';
