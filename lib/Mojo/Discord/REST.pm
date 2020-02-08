@@ -108,7 +108,7 @@ sub send_message
         };
     }
 
-    my $route = "/channels/$dest";
+    my $route = "POST /channels/$dest";
     if ( my $delay = $self->_rate_limited($route))
     {
         $self->log->warn('[REST.pm] [send_message] Route is rate limited. Trying again in ' . $delay . ' seconds');
@@ -150,15 +150,24 @@ sub edit_message
         };
     }
 
-    my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
-    $self->ua->patch($post_url => {DNT => '1'} => json => $json => sub
+    my $route = "PATCH /channels/$dest";
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [edit_message] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->edit_message($dest, $param, $callback) });
+    }
+    else
+    {
+        my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
+        $self->ua->patch($post_url => {DNT => '1'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
 
-        #say Dumper($tx->res->json);
+            $self->_set_route_rate_limits($route, $tx->res->headers);
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub delete_message
@@ -183,15 +192,24 @@ sub delete_message
         };
     }
 
-    my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
-    $self->ua->delete($post_url => {DNT => '1'} => json => $json => sub
+    my $route = "DELETE /channels/$dest";
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [delete_message] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->delete_message($dest, $param, $callback) });
+    }
+    else
+    {
+        my $post_url = $self->base_url . "/channels/$dest/messages/$msgid";
+        $self->ua->delete($post_url => {DNT => '1'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
 
-        #say Dumper($tx->res->json);
+            $self->_set_route_rate_limits($route, $tx->res->headers);
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub set_topic
@@ -201,11 +219,24 @@ sub set_topic
     my $json = {
         'topic' => $topic
     };
-    $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+
+    my $route = "PATCH /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->log->warn('[REST.pm] [set_topic] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->set_topic($channel, $topic, $callback) });
+    }
+    else
+    {
+        $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 # Send "acknowledged" DM 
@@ -243,11 +274,24 @@ sub create_dm
     my $json = {
         'recipient_id' => $id
     };
-    $self->ua->post($url => {Accept => '*/*'} => json => $json => sub
+
+    my $route = 'POST /users';
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->log->warn('[REST.pm] [create_dm] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->create_dm($id, $callback) });
+    }
+    else
+    {
+        $self->ua->post($url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub get_user
