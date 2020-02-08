@@ -298,39 +298,69 @@ sub get_user
 {
     my ($self, $id, $callback) = @_;
 
-    my $url = $self->base_url . "/users/$id";
-    $self->ua->get($url => sub
+    my $route = 'GET /users';
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [get_user] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_user($id, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/users/$id";
+        $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
 
-        #say Dumper($tx->res->json);
+            $self->_set_route_rate_limits($route, $tx->res->headers);
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub leave_guild
 {
     my ($self, $user, $guild, $callback) = @_;
 
-    my $url = $self->base_url . "/users/$user/guilds/$guild";
-    $self->ua->delete($url => sub {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->body) if defined $callback;
-    });
+    my $route = 'DELETE /users';
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [leave_guild] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->leave_guild($user, $guild, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/users/$user/guilds/$guild";
+        $self->ua->delete($url => sub {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->body) if defined $callback;
+        });
+    }
 }
 
 sub get_guilds
 {
     my ($self, $user, $callback) = @_;
 
-    my $url = $self->base_url . "/users/$user/guilds";
-
-    return $self->ua->get($url => sub
+    my $route = 'GET /users';
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->log->warn('[REST.pm] [get_guilds] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_guilds($user, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/users/$user/guilds";
+
+        return $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 # Tell the channel that the bot is "typing", aka thinking about a response.
