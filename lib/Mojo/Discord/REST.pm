@@ -34,12 +34,61 @@ has 'ua'            => ( is => 'lazy', builder => sub
                             return $ua;
                         });
 has 'log'           => ( is => 'ro' );
+has 'rate_limits'   => ( is => 'rwp', default => sub { {} } );
+has 'rate_buckets'  => ( is => 'rwp', default => sub { {} } );
+
+# Every REST call returns rate limit information in the header
+# There is a global rate limit, but also a "per-route" limit
+# This means we need to interogate the headers on every response.
+# See the Discord API docs for more details.
+#
+# This sub is just responsible for recording the returned rate limits, not to enforce them.
+# It overrides the default setter for rate_limits so you can just pass in a Mojo::Header object and not worry about it.
+sub _set_route_rate_limits
+{
+    my ($self, $route, $headers) = @_;
+
+    my $bucket = $headers->header('x-ratelimit-bucket');
+
+    $self->rate_buckets->{$route} = $bucket;
+
+    $self->rate_limits->{$bucket}{'limit'} = $headers->header('x-ratelimit-limit');
+    $self->rate_limits->{$bucket}{'reset'} = $headers->header('x-ratelimit-reset');
+    $self->rate_limits->{$bucket}{'remaining'} = $headers->header('x-ratelimit-remaining');
+    $self->rate_limits->{$bucket}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
+
+    #say Data::Dumper->Dump([$self->rate_limits->{$bucket}], ['rate_limit_bucket']);
+    $self->log->debug('[REST.pm] [_set_route_rate_limits] Setting rate limits for Bucket ID ' . $bucket);
+}
+
+# We should also be checking the rate limits (if known) for a route before we send a request.
+# This returns the time until this bucket is allowed to send another message.
+# If we are not rate limited (or don't have rate limits for this route yet), it will return zero.
+sub _rate_limited
+{
+    my ($self, $route) = @_;
+
+    my $bucket_id = $self->rate_buckets->{$route};
+    return undef unless $bucket_id;
+
+    my $bucket = $self->rate_limits->{$bucket_id};
+    return undef unless $bucket;
+
+
+    my $remaining = $bucket->{'remaining'};
+    my $reset_after = $bucket->{'reset'} - time;
+
+    $self->log->debug('[REST.pm] [_rate_limited] Bucket ID ' . $bucket_id . ' . Quota ' . $remaining . ' Reset In ' . $reset_after . ' seconds');
+
+    ( $remaining > 0 or $reset_after < 0 ) ? return undef : return $reset_after;
+}
+
 
 # send_message will check if it is being passed a hashref or a string.
 # This way it is simple to just send a message by passing in a string, but it can also support things like embeds and the TTS flag when needed.
 sub send_message
 {
-    my ($self, $dest, $param, $callback) = @_;
+    my ($self, $dest, $param, $callback) = @_; 
 
     my $json;
 
@@ -59,15 +108,24 @@ sub send_message
         };
     }
 
-    my $post_url = $self->base_url . "/channels/$dest/messages";
-    $self->ua->post($post_url => {Accept => '*/*'} => json => $json => sub
+    my $route = "/channels/$dest";
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [send_message] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->send_message($dest, $param, $callback) });
+    }
+    else
+    {
+        my $post_url = $self->base_url . "/channels/$dest/messages";
+        $self->ua->post($post_url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
 
-        #say Dumper($tx->res->json);
+            $self->_set_route_rate_limits($route, $tx->res->headers);
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub edit_message
@@ -363,4 +421,134 @@ sub add_reaction
     });
 }
 
+sub get_audit_log
+{
+    my ($self, $guild_id, $callback) = @_;
+
+    my $url = $self->base_url . "/guilds/$guild_id/audit-logs";
+    
+    $self->ua->get($url => sub
+    {
+        my ($ua, $tx) = @_;
+        $callback->($tx->res->json) if defined $callback;
+    });
+}
+
+
+
 1;
+
+=head1 NAME
+
+Mojo::Discord::REST - An implementation of the Discord Public REST API endpoints
+
+=head1 SYNOPSIS
+
+```perl
+#!/usr/bin/env perl
+
+use v5.10;
+use strict;
+use warnings;
+
+my $rest = Mojo::Discord::REST->new(
+    'token'         => 'token-string',
+    'name'          => 'client-name',
+    'url'           => 'my-website',
+    'version'       => '1.0',
+    'log'           => Mojo::Log->new(
+                            path    => '/path/to/logs/rest.log',
+                            level   => 'DEBUG',
+                        ),
+);
+
+$rest->get_user('1234567890', sub { my $json = shift; say $json->{'id'} });
+```
+
+=head1 DESCRIPTION
+
+L<Mojo::Discord::REST> wrapper for the Discord REST API endpoints.
+
+It requires a discord token, and some of the calls require you to be connected to a Discord Gateway as well (eg, sending messages)
+
+Typically you would not interact with this module directly, as L<Mojo::Discord> functions as a wrapper for this and related modules.
+
+All calls accept an optional callback parameter, which this module will use to provide return values.
+
+=head1 PROPERTIES
+
+L<Mojo::Discord::REST> requires the following to be passed in on instantiation
+
+=head2 token
+    This is a Discord Bot token generated by the Discord API. 
+
+=head2 name
+    This name is only used in the Mojo::UserAgent agent name, it does not determine the bot's username.
+
+=head2 url
+    A URL relevant to your bot - perhaps a github repo or a public website.
+
+=head2 version
+    The version of your client application
+
+=head2 log
+    A Mojo::Log object the module can use to write to disk
+
+=head1 ATTRIBUTES
+
+L<Mojo::Discord::REST> provides these attributes beyond what is passed in at creation.
+
+=head2 agent
+    The useragent string used by Mojo::UserAgent to identify itself
+
+=head2 ua
+    The Mojo::UserAgent object used to make calls to the Discord REST API endpoints
+
+=head1 SUBROUTINES
+
+L<Mojo::Discord::REST> provides the following subs you may want to leverage
+
+=head2 send_message
+    Accepts a channel ID, a message to send, and an optional callback sub.
+    The message can either be a string of text to send to the channel, or it can be a JSON string of a discord MESSAGE payload. The latter offers you low level control over the message contents.
+
+    ```perl
+    $rest->send_message($channel, 'Test message please ignore');
+    ```
+
+=head2 edit_message
+    Accepts a channel ID, a message ID, an updated message, and an optional callback
+    Like send_message, the updated messaage can be either a simple string or it can be a JSON discord MESSAGE payload
+
+=head2 delete_message
+    Accepts a channel ID, a message ID, 
+
+
+
+=head1 BUGS
+
+Report issues on github
+
+https://github.com/vsTerminus/Mojo-Discord
+
+=head1 CONTRIBUTE
+
+Contributions are welcomed via Github pull request
+
+https://github.com/vsTerminus/Mojo-Discord
+
+=head1 AUTHOR
+
+Travis Smith <tesmith@cpan.org>
+
+=head1 COPYRIGHT AND LICENSE
+This software is Copyright (c) 2017-2020 by Travis Smith.
+
+This is free software, licensed under:
+
+  The MIT (X11) License
+
+=head1 SEE ALSO
+
+- L<Mojo::UserAgent>
+- L<Mojo::IOLoop>

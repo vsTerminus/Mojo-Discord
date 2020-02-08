@@ -55,6 +55,7 @@ has dispatches => ( is => 'ro', default => sub {
         'PRESENCE_UPDATE'       => \&dispatch_presence_update,
         'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
         'READY'                 => \&dispatch_ready,
+        'SESSIONS_REPLACE'      => \&dispatch_sessions_replace,
         # More as needed
     }
 });
@@ -173,13 +174,13 @@ sub status_update
 
     $d->{'afk'} = $param->{'afk'} // 0;
     $d->{'since'} = $param->{'since'} // undef;
+    $d->{'status'} = $param->{'status'} // "online";
+    
     $d->{'game'}{'name'} = $param->{'name'} // undef;
     $d->{'game'}{'type'} = $param->{'type'} // 0;
     $d->{'game'}{'details'} = $param->{'details'} // undef;
     $d->{'game'}{'state'} = $param->{'state'} // undef;
-    $d->{'status'} = $param->{'status'} // "online";
 
-    $self->log->debug("[Gateway.pm] [status_update] Updated own status: " . $d->{'game'}{'name'});
     $self->send_op($op, $d);
 }
 
@@ -592,6 +593,14 @@ sub dispatch_message_update
 
 sub dispatch_message_delete
 {
+}
+
+sub dispatch_sessions_replace
+{
+    my ($self, $hash) = @_;
+
+    $self->log->debug('SESSIONS_REPLACE payload:');
+    $self->log->debug(Data::Dumper->Dump([$hash], ['hash']));
 }
 
 # Create the new Guild object and return it
