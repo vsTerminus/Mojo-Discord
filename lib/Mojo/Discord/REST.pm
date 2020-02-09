@@ -50,15 +50,23 @@ sub _set_route_rate_limits
 
     my $bucket = $headers->header('x-ratelimit-bucket');
 
-    $self->rate_buckets->{$route} = $bucket;
+    if ( $bucket )
+    {
+        $self->rate_buckets->{$route} = $bucket;
 
-    $self->rate_limits->{$bucket}{'limit'} = $headers->header('x-ratelimit-limit');
-    $self->rate_limits->{$bucket}{'reset'} = $headers->header('x-ratelimit-reset');
-    $self->rate_limits->{$bucket}{'remaining'} = $headers->header('x-ratelimit-remaining');
-    $self->rate_limits->{$bucket}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
+        $self->rate_limits->{$bucket}{'limit'} = $headers->header('x-ratelimit-limit');
+        $self->rate_limits->{$bucket}{'reset'} = $headers->header('x-ratelimit-reset');
+        $self->rate_limits->{$bucket}{'remaining'} = $headers->header('x-ratelimit-remaining');
+        $self->rate_limits->{$bucket}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
 
-    #say Data::Dumper->Dump([$self->rate_limits->{$bucket}], ['rate_limit_bucket']);
-    $self->log->debug('[REST.pm] [_set_route_rate_limits] Setting rate limits for Bucket ID ' . $bucket);
+        $self->log->debug('[REST.pm] [_set_route_rate_limits] Setting rate limits for Bucket ID ' . $bucket);
+    }
+    # Else, Discord didn't return x-ratelimit-bucket headers.
+    # This happens when we first connect, and to my knowledge is safe to ignore.
+    else
+    {
+        #say Data::Dumper->Dump([$headers], ['headers']);
+    }
 }
 
 # We should also be checking the rate limits (if known) for a route before we send a request.
@@ -493,14 +501,24 @@ sub get_channel_webhooks
 
     die("get_channel_webhooks requires a channel ID") unless (defined $channel);
 
-    my $url = $self->base_url . "/channels/$channel/webhooks";
-
-    $self->ua->get($url => sub
+    my $route = "GET /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [get_channel_webhooks] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_channel_webhooks($channel, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/channels/$channel/webhooks";
+        $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub get_guild_webhooks
@@ -509,42 +527,76 @@ sub get_guild_webhooks
 
     die("get_guild_webhooks requires a guild ID") unless (defined $guild);
 
-    my $url = $self->base_url . "/guilds/$guild/webhooks";
-
-    $self->ua->get($url => sub
+    my $route = "GET /guilds/$guild";
+    if ( my $delay = $self->_rate_limited($route) )
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [get_guild_webhooks] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_guild_webhooks($guild, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/guilds/$guild/webhooks";
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub add_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
 
-    my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
-    my $json;
-    
-    $self->ua->put($url => {Accept => '*/*'} => json => $json => sub
-    {   
-        my ($ua, $tx) = @_;
+    my $route = "GET /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [add_reaction] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->add_reaction($channel, $msgid, $emoji, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
+        my $json;
         
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->ua->put($url => {Accept => '*/*'} => json => $json => sub
+        {   
+            my ($ua, $tx) = @_;
+    
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub get_audit_log
 {
     my ($self, $guild_id, $callback) = @_;
 
-    my $url = $self->base_url . "/guilds/$guild_id/audit-logs";
-    
-    $self->ua->get($url => sub
+    my $route = "GET /guilds/$guild_id";
+    if ( my $delay = $self->_rate_limited($route) )
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->json) if defined $callback;
-    });
+        $self->log->warn('[REST.pm] [get_audit_log] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_audit_log($guild_id, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/guilds/$guild_id/audit-logs";
+        
+        $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 
