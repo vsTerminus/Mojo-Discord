@@ -358,6 +358,9 @@ sub get_guilds
         return $self->ua->get($url => sub
         {
             my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
             $callback->($tx->res->json) if defined $callback;
         });
     }
@@ -368,13 +371,25 @@ sub start_typing
 {
     my ($self, $dest, $callback) = @_;
 
-    my $typing_url = $self->base_url . "/channels/$dest/typing";
-
-    $self->ua->post($typing_url, sub
+    my $route = "POST /channels/$dest";
+    if ( my $delay = $self->_rate_limited($route))
     {
-        my ($ua, $tx) = @_;
-        $callback->($tx->res->body) if defined $callback;
-    });
+        $self->log->warn('[REST.pm] [start_typing] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->start_typing($dest, $callback) });
+    }
+    else
+    {
+        my $typing_url = $self->base_url . "/channels/$dest/typing";
+
+        $self->ua->post($typing_url, sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->body) if defined $callback;
+        });
+    }
 }
 
 # Create a new Webhook
@@ -410,19 +425,32 @@ sub create_webhook
     my $type = ( $avatar_file =~ /.png$/ ? 'png' : 'jpeg' ) if defined $avatar_file;
     $json->{'avatar'} = "data:image/$type;base64," . $base64 if defined $base64;
 
-    # Next, call the endpoint
-    my $url = $self->base_url . "/channels/$channel/webhooks";
-    if ( defined $callback )
+
+    my $route = "POST /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
     {
-        $self->ua->post($url => json => $json => sub
-        {
-            my ($ua, $tx) = @_;
-            $callback->($tx->res->json);
-        });
+        $self->log->warn('[REST.pm] [create_webhook] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->create_webhook($channel, $params, $callback) });
     }
     else
     {
-        return $self->ua->post($url => json => $json);
+        # Next, call the endpoint
+        my $url = $self->base_url . "/channels/$channel/webhooks";
+        if ( defined $callback )
+        {
+            $self->ua->post($url => json => $json => sub
+            {
+                my ($ua, $tx) = @_;
+
+                $self->_set_route_rate_limits($route, $tx->res->headers);
+
+                $callback->($tx->res->json);
+            });
+        }
+        else
+        {
+            return $self->ua->post($url => json => $json);
+        }
     }
 }
 
@@ -440,12 +468,23 @@ sub send_webhook
         $params = {'content' => $params};
     }
 
-    $self->ua->post($url => json => $params => sub
+    my $route = "POST /webhooks/$id";
+    if ( my $delay = $self->_rate_limited($route) )
     {
-        my ($ua, $tx) = @_;
+        $self->log->warn('[REST.pm] [send_webhook] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->send_webhook($channel, $hook, $params, $callback) });
+    }
+    else
+    {
+        $self->ua->post($url => json => $params => sub
+        {
+            my ($ua, $tx) = @_;
 
-        $callback->($tx->res->json) if defined $callback;
-    });
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
 }
 
 sub get_channel_webhooks
