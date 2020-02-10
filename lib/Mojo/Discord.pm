@@ -38,6 +38,7 @@ has rest        => ( is => 'lazy', builder => sub {
                         'name'          => $self->name,
                         'url'           => $self->url,
                         'version'       => $self->version,
+                        'base_url'      => $self->base_url,
                         'log'           => $self->log,
                     )});
 has guilds      => ( is => 'rw', default => sub { {} } );
