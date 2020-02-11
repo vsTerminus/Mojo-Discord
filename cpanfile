@@ -13,3 +13,8 @@ requires 'IO::Socket::SSL';
 requires 'Role::EventEmitter';
 requires 'Time::Duration';
 requires 'URI::Escape';
+
+# Testing
+requires 'Mojo::Base';
+requires 'Test::More';
+requires 'Mojolicious::Lite';
