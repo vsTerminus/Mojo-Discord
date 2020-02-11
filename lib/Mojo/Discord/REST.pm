@@ -9,8 +9,10 @@ extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
+use Mojo::AsyncAwait;
 use URI::Escape;
 use Data::Dumper;
+use Carp;
 
 use namespace::clean;
 
@@ -91,6 +93,39 @@ sub _rate_limited
     ( $remaining > 0 or $reset_after < 0 ) ? return undef : return $reset_after;
 }
 
+# Validate the format of any channel, user, guild or similar ID.
+# Make sure it's defined, numeric, and positive.
+# Returns 1 if it passes everything.
+sub _valid_id
+{
+    my ($self, $s, $id) = @_;
+
+    unless ( defined $s )
+    {
+        $self->log->warn('[REST.pm] [_valid_id] Received no parameters');
+        return undef;
+    }
+
+    unless ( defined $id )
+    {
+        $self->log->warn('[REST.pm] [' . $s . '] $id is undefined');
+        return undef;
+    }
+
+    unless ( $id =~ /^\d+$/ )
+    {
+        $self->log->warn('[REST.pm] [' . $s . '] $id (' . $id . ') is not numeric');
+        return undef;
+    }
+
+    unless ( $id > 0 )
+    {
+        $self->log->debu('[REST.pm] [' . $s . '] $id (' . $id . ') cannot be a negative number');
+        return undef;
+    }
+
+    return 1;
+}
 
 # send_message will check if it is being passed a hashref or a string.
 # This way it is simple to just send a message by passing in a string, but it can also support things like embeds and the TTS flag when needed.
@@ -306,6 +341,12 @@ sub get_user
 {
     my ($self, $id, $callback) = @_;
 
+    unless ( $self->_valid_id('get_user', $id) )
+    {
+        $callback->(undef) if defined $callback;
+        return;
+    }
+
     my $route = 'GET /users';
     if ( my $delay = $self->_rate_limited($route))
     {
@@ -325,6 +366,16 @@ sub get_user
         });
     }
 }
+
+async get_user_p => sub
+{
+    my ($self, $id) = @_;
+    my $promise = Mojo::Promise->new;
+
+    $self->get_user($id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
 
 sub leave_guild
 {

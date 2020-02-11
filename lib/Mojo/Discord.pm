@@ -9,7 +9,10 @@ use strictures 2;
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
 use Mojo::Log;
+use Mojo::AsyncAwait;
+use Mojo::Promise;
 use Data::Dumper;
+use Carp;
 
 use namespace::clean;
 
@@ -54,6 +57,34 @@ has log         => ( is => 'lazy', builder => sub {
 has logdir      => ( is => 'rw', default => '/var/log/mojo-discord' );
 has logfile     => ( is => 'rw', default => 'mojo-discord.log' );
 has loglevel    => ( is => 'rw', default => 'debug' );
+
+# Validate the format of any channel, user, guild or similar ID.
+# Make sure it's defined, numeric, and positive.
+# Returns 1 if it passes everything.
+sub _valid_id
+{
+    my ($self, $s, $id) = @_;
+
+    unless ( defined $id )
+    {
+        $self->log->warn('[Discord.pm] [' . $s . '] $id is undefined');
+        return undef;
+    }
+
+    unless ( $id =~ /^\d+$/ )
+    {
+        $self->log->warn('[Discord.pm] [' . $s . '] $id (' . $id . ') is not numeric');
+        return undef;
+    }
+
+    unless ( $id > 0 )
+    {
+        $self->log->debu('[Discord.pm] [' . $s . '] $id (' . $id . ') cannot be a negative number');
+        return undef;
+    }
+
+    return 1;
+}
 
 sub init
 {
@@ -118,17 +149,27 @@ sub get_user
 {
     my ($self, $id, $callback) = @_;
 
-    if ( exists $self->gw->users->{$id} )
+    unless ( $self->_valid_id('get_user', $id) )
     {
-        $callback ? $callback->( $self->gw->users->{$id} ) : return $self->gw->users->{$id};
+        $callback->(undef) if defined $callback;
+        return;
     }
-    else
-    {
-        # If we don't have the user stored already then use REST to look them up.
-        # todo, make this also return a User hash object instead of JSON.
+
+    exists $self->gw->users->{$id} ?
+        $callback->( $self->gw->users->{$id} ) :
         $self->rest->get_user($id, $callback);
-    }
 }
+
+async get_user_p => sub
+{
+    my ($self, $id) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->get_user($id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
 
 sub get_guilds
 {
