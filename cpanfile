@@ -1,6 +1,7 @@
 # To use: cpanm --installdeps .
+requires 'perl' => '5.010001';              # Minimum required Perl version
 requires 'Moo';                             # OO Framework
-requires 'strictures', '2';                 # Enables strict and warnings with specific settings
+requires 'strictures', '>=2, <3';           # Enables strict and warnings with specific settings
 requires 'namespace::clean';                # Removes declared and imported symbols from your compiled package
 requires 'Mojo::UserAgent';                 # HTTP(S) and WebSocket connections
 requires 'Mojo::UserAgent::Role::Queued';   # Connection limiting for UserAgent
@@ -26,3 +27,4 @@ requires 'Test::Mockify::Verify';           # Verify that our mocked objects wer
 requires 'Test::Mockify::Matcher';          # Define different types of parameters for our mocked objects to accept
 requires 'Mock::Quick';                     # Allows us to takeover loaded classes and override their functionality
 requires 'Mojolicious::Lite';               # Simple web service we can call instead of Discord's API endpoints
+requires 'Mojolicious' => '8.0';            # Require at least version 8 of Mojolicious
