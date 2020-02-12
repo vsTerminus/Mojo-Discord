@@ -20,6 +20,7 @@ get '/app/users/1' => sub {
 get '/app/users/rate_limited' => sub {
 };
 
+app->log->level('fatal');
 app->start();
 
 ##########################
