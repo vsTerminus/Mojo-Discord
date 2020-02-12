@@ -1,14 +1,9 @@
 use Mojo::Base -strict;
 
 use Test::More;
-use Test::Mockify;
-use Test::Mockify::Verify qw( WasCalled );
-use Test::Mockify::Matcher qw( String );
+use Mock::Quick;
 use Mojolicious::Lite;
 use Mojo::AsyncAwait;
-use Data::Dumper;
-
-require_ok( 'Mojo::Discord' );
 
 get '/app/users/1' => sub {
     my $c = shift;
@@ -29,10 +24,11 @@ app->start();
 
 ##########################
 
-my $mock_logger_builder = Test::Mockify->new( 'Mojo::Log', [] );
-$mock_logger_builder->mock('warn')->when(String())->thenReturnUndef;
-$mock_logger_builder->mock('debug')->when(String())->thenReturnUndef; # suppress debug output
-my $mock_logger = $mock_logger_builder->getMockObject();
+require_ok( 'Mojo::Discord' );
+
+# Take over Mojo::IOLoop->timer with a mock function that just sets the timer_id value
+my $timer_id;
+my $control = qtakeover 'Mojo::IOLoop' => ( 'timer' => sub { my ($self, $id) = @_; $timer_id = $id } );
 
 my $discord = Mojo::Discord->new(
     token       => 'token_string',
@@ -41,8 +37,7 @@ my $discord = Mojo::Discord->new(
     version     => 'bot_version',
     base_url    => '/app',
     logdir      => '.',
-    loglevel    => 'warn',
-    log         => $mock_logger,
+    loglevel    => 'fatal',
 );
 
 my $rest = $discord->rest;
@@ -92,13 +87,12 @@ async main => sub
     $json = await $rest->get_user_p('2');
     is( $json, undef, 'rest cached id' );
 
-    # Test rate limiting by checking to see our mock logger was called.
+    # Test rate limiting by checking to see if our mocked IOLoop->timer sub was called
     # No need to call this twice, there is no rate limit logic in Discord.pm
     $rest->rate_limits->{'bucket'}{'remaining'} = 0;
-    $rest->rate_limits->{'bucket'}{'reset_after'} = time; # Should allow it to recurse immediately
-    $json = await $discord->get_user_p('1');
-    ok(WasCalled($mock_logger, 'warn'), 'rate limit "warn" log triggered');
-    is($json, '{success: true}', 'rate limit recursed successfully');
+    $rest->rate_limits->{'bucket'}{'reset_after'} = time+30;
+    $json = $discord->get_user_p('1');  # Don't need await, we've replaced Mojo::IOLoop->timer with a mock.
+    is($timer_id, 1, 'rate limited timer called correctly' );
 };
 
 main()->wait();
