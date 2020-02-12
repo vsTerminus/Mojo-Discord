@@ -1,4 +1,5 @@
 package Mojo::Discord::Guild::Presence;
+our $VERSION = '0.001';
 
 use Moo;
 use strictures 2;

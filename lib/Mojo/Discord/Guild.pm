@@ -1,5 +1,6 @@
 package Mojo::Discord::Guild;
 use feature 'say';
+our $VERSION = '0.001';
 
 use Moo;
 use strictures 2;

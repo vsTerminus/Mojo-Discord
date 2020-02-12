@@ -1,4 +1,5 @@
 package Mojo::Discord::User;
+our $VERSION = '0.001';
 
 use Moo;
 use strictures 2;
