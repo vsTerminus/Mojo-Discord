@@ -6,10 +6,10 @@ requires 'namespace::clean';                # Removes declared and imported symb
 requires 'Mojo::UserAgent';                 # HTTP(S) and WebSocket connections
 requires 'Mojo::UserAgent::Role::Queued';   # Connection limiting for UserAgent
 requires 'Mojo::IOLoop';                    # Event loop required so the program does not exit and can wait for asynchronous operations
-requires 'Mojo::AsyncAwait';                # A nicer way of handling asynchronous events than callbacks or promise syntax
 requires 'Mojo::JSON';                      # Translate between JSON and Perl hash for talking to Discord
 requires 'Mojo::Util';                      # Handles base64 image data conversion
 requires 'Mojo::Log';                       # Enables us to log information to disk instead of to screen
+requires 'Mojo::Promise';                   # Alternative to callbacks, also used for testing
 requires 'JSON::MaybeXS';                   # Provides proper escaping of Unicode characters so discord will encode them correctly
 requires 'Compress::Zlib';                  # Handles incoming compressed Zlib blobs
 requires 'Encode::Guess';                   # Used to determine if we are dealing with a compressed stream or not

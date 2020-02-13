@@ -9,7 +9,6 @@ extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
-use Mojo::AsyncAwait;
 use URI::Escape;
 use Data::Dumper;
 use Carp;
@@ -367,7 +366,7 @@ sub get_user
     }
 }
 
-async get_user_p => sub
+sub get_user_p
 {
     my ($self, $id) = @_;
     my $promise = Mojo::Promise->new;

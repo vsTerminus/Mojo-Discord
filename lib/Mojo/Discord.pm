@@ -9,10 +9,8 @@ use strictures 2;
 use Mojo::Discord::Gateway;
 use Mojo::Discord::REST;
 use Mojo::Log;
-use Mojo::AsyncAwait;
 use Mojo::Promise;
 use Data::Dumper;
-use Carp;
 
 use namespace::clean;
 
@@ -160,7 +158,7 @@ sub get_user
         $self->rest->get_user($id, $callback);
 }
 
-async get_user_p => sub
+sub get_user_p
 {
     my ($self, $id) = @_;
 
