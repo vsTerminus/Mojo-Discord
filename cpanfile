@@ -29,3 +29,4 @@ requires 'Test::Mockify::Matcher';          # Define different types of paramete
 requires 'Mock::Quick';                     # Allows us to takeover loaded classes and override their functionality
 requires 'Mojolicious::Lite';               # Simple web service we can call instead of Discord's API endpoints
 requires 'Mojolicious' => '8.0';            # Require at least version 8 of Mojolicious
+requires 'Test::Memory::Cycle';             # Look for memory cycles
