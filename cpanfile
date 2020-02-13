@@ -19,14 +19,14 @@ requires 'Role::EventEmitter';              # Replaces callbacks, allows client 
 requires 'Time::Duration';                  # Allows us to calculate duration between two times, eg uptime
 requires 'URI::Escape';                     # Make any text URL safe
 
-
-# Unit Tests
-requires 'Mojo::Base';                      # Simpler OO framework than Moo, lighter weight
-requires 'Test::More';                      # Different ways to "say OK"
-requires 'Test::Mockify';                   # Create mock objects for things we don't actually want to call (Eg loggers)
-requires 'Test::Mockify::Verify';           # Verify that our mocked objects were actually called
-requires 'Test::Mockify::Matcher';          # Define different types of parameters for our mocked objects to accept
-requires 'Mock::Quick';                     # Allows us to takeover loaded classes and override their functionality
-requires 'Mojolicious::Lite';               # Simple web service we can call instead of Discord's API endpoints
-requires 'Mojolicious' => '8.0';            # Require at least version 8 of Mojolicious
-requires 'Test::Memory::Cycle';             # Look for memory cycles
+on 'test' => sub {
+    requires 'Mojo::Base';                      # Simpler OO framework than Moo, lighter weight
+    requires 'Test::More';                      # Different ways to "say OK"
+    requires 'Test::Mockify';                   # Create mock objects for things we don't actually want to call (Eg loggers)
+    requires 'Test::Mockify::Verify';           # Verify that our mocked objects were actually called
+    requires 'Test::Mockify::Matcher';          # Define different types of parameters for our mocked objects to accept
+    requires 'Mock::Quick';                     # Allows us to takeover loaded classes and override their functionality
+    requires 'Mojolicious::Lite';               # Simple web service we can call instead of Discord's API endpoints
+    requires 'Mojolicious' => '8.0';            # Require at least version 8 of Mojolicious
+    requires 'Test::Memory::Cycle';             # Look for memory cycles
+};
