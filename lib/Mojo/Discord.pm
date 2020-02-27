@@ -236,9 +236,9 @@ sub create_webhook
 
 sub send_webhook
 {
-    my ($self, $channel, $id, $token, $params, $callback) = @_;
+    my ($self, $channel, $hook, $params, $callback) = @_;
 
-    $self->rest->send_webhook($channel, $id, $token, $params, $callback);
+    $self->rest->send_webhook($channel, $hook, $params, $callback);
 }
 
 sub get_channel_webhooks
