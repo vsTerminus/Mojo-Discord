@@ -288,7 +288,7 @@ sub send_ack_dm
 {
     my ($self, $channel_id, $message_id, $user_id, $message, $callback) = @_;
 
-    $self->rest->create_reaction($channel_id, $message_id, uri_escape_utf8("\x{2705}"));
+    $self->rest->create_reaction($channel_id, $message_id, "\x{2705}");
     $self->send_dm($user_id, $message, $callback);
 }
 
