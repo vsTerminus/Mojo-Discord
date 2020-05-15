@@ -263,11 +263,46 @@ sub get_cached_webhooks
     return $self->gw->webhooks->{$channel};
 }
 
-sub add_reaction
+sub create_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
 
-    $self->rest->add_reaction($channel, $msgid, $emoji, $callback);
+    $self->rest->create_reaction($channel, $msgid, $emoji, $callback);
+}
+
+sub delete_own_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    $self->rest->delete_reaction($channel, $msgid, $emoji, '@me', $callback);
+}
+
+sub delete_user_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $userid, $callback) = @_;
+
+    $self->rest->delete_reaction($channel, $msgid, $emoji, $userid, $callback);
+}
+
+sub get_reactions
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    $self->rest->get_reactions($channel, $msgid, $emoji, $callback);
+}
+
+sub delete_all_reactions
+{
+    my ($self, $channel, $msgid, $callback) = @_;
+
+    $self->rest->delete_all_reactions($channel, $msgid, 0, $callback);
+}
+
+sub delete_all_reactions_for_emoji
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    $self->rest->delete_all_reactions($channel, $msgid, $emoji, $callback);
 }
 
 1;
