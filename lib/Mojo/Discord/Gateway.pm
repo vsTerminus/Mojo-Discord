@@ -127,7 +127,7 @@ has tx                  => ( is => 'rw' );
 has heartbeat_interval  => ( is => 'rw' );
 has heartbeat_loop      => ( is => 'rw' );
 has heartbeat           => ( is => 'rw', default => 2 );
-has base_url            => ( is => 'ro', default => 'https://discord.com/api' );
+has base_url            => ( is => 'ro', default => 'https://discordapp.com/api' );
 has gateway_url         => ( is => 'rw', default => sub { shift->base_url . '/gateway' });
 has gateway_version     => ( is => 'ro', default => 6 );
 has gateway_encoding    => ( is => 'ro', default => 'json' );

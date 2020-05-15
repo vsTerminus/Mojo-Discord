@@ -27,7 +27,7 @@ has version             => ( is => 'ro', required => 1 );
 has code                => ( is => 'rw' );
 has refresh_token       => ( is => 'ro' );
 has verbose             => ( is => 'rw' );
-has base_url            => ( is => 'ro', default => 'https://discord.com/api' );
+has base_url            => ( is => 'ro', default => 'https://discordapp.com/api' );
 has token_url           => ( is => 'ro', default => sub { shift->base_url . '/oauth2/token' } );
 has agent               => ( is => 'rw' );
 has grant_type          => ( is => 'rw', default => sub { defined shift->code? 'authorization_code' : 'refresh_token' } );
