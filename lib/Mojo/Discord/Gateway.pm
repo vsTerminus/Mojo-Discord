@@ -101,6 +101,7 @@ has no_resume => ( is => 'ro', default => sub {
     {
         '1000' => 'Normal Closure',
         '1001' => 'Going Away',
+        '1006' => 'Abnormal Closure',
         '1009' => 'Message Too Big',
         '1011' => 'Internal Server Err',
         '1012' => 'Service Restart',
