@@ -598,25 +598,100 @@ sub get_guild_webhooks
     }
 }
 
-sub add_reaction
+sub create_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
 
     my $route = "GET /channels/$channel";
     if ( my $delay = $self->_rate_limited($route) )
     {
-        $self->log->warn('[REST.pm] [add_reaction] Route is rate limited. Trying again in ' . $delay . ' seconds');
-        Mojo::IOLoop->timer($delay => sub { $self->add_reaction($channel, $msgid, $emoji, $callback) });
+        $self->log->warn('[REST.pm] [create_reaction] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->create_reaction($channel, $msgid, $emoji, $callback) });
     }
     else
     {
-        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/$emoji/\@me";
-        my $json;
-        
-        $self->ua->put($url => {Accept => '*/*'} => json => $json => sub
-        {   
+        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/" . uri_escape_utf8($emoji) . '/@me';
+
+        $self->ua->put($url => sub
+        {
             my ($ua, $tx) = @_;
-    
+ 
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
+sub delete_reaction
+{
+    my ($self, $channel, $msgid, $emoji, $userid, $callback) = @_;
+
+    my $route = "GET /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [delete_reaction] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->delete_reaction($channel, $msgid, $emoji, $userid, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/" . uri_escape_utf8($emoji) . '/' . $userid;
+
+        $self->ua->delete($url => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
+sub get_reactions
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    my $route = "GET /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [get_reactions] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->get_reactions($channel, $msgid, $emoji, $callback) });
+    }
+    else
+    {
+        # Returns a max. of 25 users by default, query string params 'before', 'after' and 'limit' could be used
+        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/" . uri_escape_utf8($emoji);
+
+        $self->ua->get($url => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
+sub delete_all_reactions
+{
+    my ($self, $channel, $msgid, $emoji, $callback) = @_;
+
+    my $route = "GET /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [delete_all_reactions] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->delete_all_reactions($channel, $msgid, $emoji, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions" . ($emoji ? ('/' . uri_escape_utf8($emoji)) : '');
+
+        $self->ua->delete($url => sub
+        {
+            my ($ua, $tx) = @_;
+
             $self->_set_route_rate_limits($route, $tx->res->headers);
 
             $callback->($tx->res->json) if defined $callback;
@@ -648,8 +723,6 @@ sub get_audit_log
         });
     }
 }
-
-
 
 1;
 

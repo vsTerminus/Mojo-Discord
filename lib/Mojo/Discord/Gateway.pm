@@ -32,30 +32,33 @@ has handlers => ( is => 'ro', default => sub {
 
 has dispatches => ( is => 'ro', default => sub {
     {
-        'TYPING_START'          => \&dispatch_typing_start,
-        'MESSAGE_CREATE'        => \&dispatch_message_create,
-        'MESSAGE_UPDATE'        => \&dispatch_message_update,
-        'MESSAGE_DELETE'        => \&dispatch_message_delete,
-        'GUILD_CREATE'          => \&dispatch_guild_create,
-        'GUILD_UPDATE'          => \&dispatch_guild_update,
-        'GUILD_DELETE'          => \&dispatch_guild_delete,
-        'GUILD_MEMBER_ADD'      => \&dispatch_guild_member_add,
-        'GUILD_MEMBER_UPDATE'   => \&dispatch_guild_member_update,
-        'GUILD_MEMBER_REMOVE'   => \&dispatch_guild_member_remove,
-        'GUILD_MEMBERS_CHUNK'   => \&dispatch_guild_members_chunk,
-        'GUILD_EMOJIS_UPDATE'   => \&dispatch_guild_emojis_update,
-        'GUILD_ROLE_CREATE'     => \&dispatch_guild_role_create,
-        'GUILD_ROLE_UPDATE'     => \&dispatch_guild_role_update,
-        'GUILD_ROLE_DELETE'     => \&dispatch_guild_role_delete,
-        'USER_SETTINGS_UPDATE'  => \&dispatch_user_settings_update,
-        'USER_UPDATE'           => \&dispatch_user_update,
-        'CHANNEL_CREATE'        => \&dispatch_channel_create,
-        'CHANNEL_MODIFY'        => \&dispatch_channel_modify,
-        'CHANNEL_DELETE'        => \&dispatch_channel_delete,
-        'PRESENCE_UPDATE'       => \&dispatch_presence_update,
-        'WEBHOOKS_UPDATE'       => \&dispatch_webhooks_update,
-        'READY'                 => \&dispatch_ready,
-        'SESSIONS_REPLACE'      => \&dispatch_sessions_replace,
+        'TYPING_START'                 => \&dispatch_typing_start,
+        'MESSAGE_CREATE'               => \&dispatch_message_create,
+        'MESSAGE_UPDATE'               => \&dispatch_message_update,
+        'MESSAGE_DELETE'               => \&dispatch_message_delete,
+        'MESSAGE_REACTION_ADD'         => \&dispatch_message_reaction_add,
+        'MESSAGE_REACTION_REMOVE'      => \&dispatch_message_reaction_remove,
+        'MESSAGE_REACTION_REMOVE_ALL'  => \&dispatch_message_reaction_remove_all,
+        'GUILD_CREATE'                 => \&dispatch_guild_create,
+        'GUILD_UPDATE'                 => \&dispatch_guild_update,
+        'GUILD_DELETE'                 => \&dispatch_guild_delete,
+        'GUILD_MEMBER_ADD'             => \&dispatch_guild_member_add,
+        'GUILD_MEMBER_UPDATE'          => \&dispatch_guild_member_update,
+        'GUILD_MEMBER_REMOVE'          => \&dispatch_guild_member_remove,
+        'GUILD_MEMBERS_CHUNK'          => \&dispatch_guild_members_chunk,
+        'GUILD_EMOJIS_UPDATE'          => \&dispatch_guild_emojis_update,
+        'GUILD_ROLE_CREATE'            => \&dispatch_guild_role_create,
+        'GUILD_ROLE_UPDATE'            => \&dispatch_guild_role_update,
+        'GUILD_ROLE_DELETE'            => \&dispatch_guild_role_delete,
+        'USER_SETTINGS_UPDATE'         => \&dispatch_user_settings_update,
+        'USER_UPDATE'                  => \&dispatch_user_update,
+        'CHANNEL_CREATE'               => \&dispatch_channel_create,
+        'CHANNEL_MODIFY'               => \&dispatch_channel_modify,
+        'CHANNEL_DELETE'               => \&dispatch_channel_delete,
+        'PRESENCE_UPDATE'              => \&dispatch_presence_update,
+        'WEBHOOKS_UPDATE'              => \&dispatch_webhooks_update,
+        'READY'                        => \&dispatch_ready,
+        'SESSIONS_REPLACE'             => \&dispatch_sessions_replace,
         # More as needed
     }
 });
@@ -576,7 +579,6 @@ sub dispatch_ready
 
 sub dispatch_typing_start
 {
-    
 }
 
 sub dispatch_message_create
@@ -592,6 +594,18 @@ sub dispatch_message_update
 }
 
 sub dispatch_message_delete
+{
+}
+
+sub dispatch_message_reaction_add
+{
+}
+
+sub dispatch_message_reaction_remove
+{
+}
+
+sub dispatch_message_reaction_remove_all
 {
 }
 
