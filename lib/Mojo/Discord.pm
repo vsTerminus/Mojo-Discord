@@ -19,7 +19,7 @@ has name        => ( is => 'ro' );
 has url         => ( is => 'ro' );
 has version     => ( is => 'ro' );
 has reconnect   => ( is => 'ro' );
-has base_url    => ( is => 'rw', default => 'https://discordapp.com/api' );
+has base_url    => ( is => 'rw', default => 'https://discord.com/api' );
 has gw          => ( is => 'lazy', builder => sub {
                     my $self = shift;
                     Mojo::Discord::Gateway->new(
@@ -417,7 +417,7 @@ $bot->start();
 
 =head1 DESCRIPTION
 
-L<Mojo::Discord> is a L<Mojo::UserAgent> based L<Discord|https://discordapp.com> API library designed for creating bots (including user-bots). A Discord User or Bot Token is required.
+L<Mojo::Discord> is a L<Mojo::UserAgent> based L<Discord|https://discord.com> API library designed for creating bots (including user-bots). A Discord User or Bot Token is required.
 
 The Discord API is divided into four main parts: OAuth, REST, Gateway, and Guild. The main module is a wrapper that allows you to use the REST and Gateway modules together as part of a single object.
 
