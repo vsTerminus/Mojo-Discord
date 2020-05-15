@@ -19,7 +19,7 @@ has 'token'         => ( is => 'ro' );
 has 'name'          => ( is => 'rw', required => 1 );
 has 'url'           => ( is => 'rw', required => 1 );
 has 'version'       => ( is => 'ro', required => 1 );
-has 'base_url'      => ( is => 'ro', default => 'https://discordapp.com/api' );
+has 'base_url'      => ( is => 'ro', default => 'https://discord.com/api' );
 has 'agent'         => ( is => 'lazy', builder => sub { my $self = shift; return $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
 has 'ua'            => ( is => 'lazy', builder => sub 
                         { 
