@@ -22,10 +22,11 @@ use namespace::clean;
 
 has handlers => ( is => 'ro', default => sub {
         {
-            '0'     => \&on_dispatch,
-            '9'     => \&on_invalid_session,
-            '10'    => \&on_hello,
-            '11'    => \&on_heartbeat_ack,
+            '0'     => \&on_dispatch,        # An event was dispatched.
+            '7'     => \&on_resume,          # You should attempt to reconnect and resume immediately.
+            '9'     => \&on_invalid_session, # The session has been invalidated. You should reconnect and identify/resume accordingly.
+            '10'    => \&on_hello,           # Sent immediately after connecting, contains the heartbeat_interval to use.
+            '11'    => \&on_heartbeat_ack,   # Sent in response to receiving a heartbeat to acknowledge that it has been received.
         } 
     }
 );
@@ -884,6 +885,16 @@ sub add_user
     return $user;
 }
 
+sub on_resume
+{
+    my ($self, $tx, $hash) = @_;
+    my $t = $hash->{'t'};   # Type
+    my $d = $hash->{'d'};   # Data
+ 
+    $self->allow_resume(1); # We are requested to resume.
+    $self->gw_disconnect('Resume.');
+}
+
 sub on_invalid_session
 {
     my ($self, $tx, $hash) = @_;
@@ -891,7 +902,7 @@ sub on_invalid_session
     my $d = $hash->{'d'};   # Data
  
     $self->allow_resume(0); # Have to establish a new session for this.
-    $self->gw_disconnect("Invalid Session.");
+    $self->gw_disconnect('Invalid Session.');
 }
 
 sub on_hello
