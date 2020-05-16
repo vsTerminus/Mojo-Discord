@@ -1,0 +1,2 @@
+*.pl text diff=perl linguist-language=perl
+*.pm text diff=perl linguist-language=perl
