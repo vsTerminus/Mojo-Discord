@@ -170,6 +170,31 @@ sub send_message
     }
 }
 
+sub send_message_content_blocking
+{
+    my ($self, $dest, $content, $callback) = @_;
+
+    my $json = {
+        'content' => $content
+    };
+
+    my $route = "POST /channels/$dest";
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [send_message_content_blocking] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->send_message_content_blocking($dest, $content, $callback) });
+    }
+    else
+    {
+        my $post_url = $self->base_url . "/channels/$dest/messages";
+        my $tx = $self->ua->post($post_url => {Accept => '*/*'} => json => $json);
+
+        $self->_set_route_rate_limits($route, $tx->res->headers);
+
+        $callback->($tx->res->json) if defined $callback;
+    }
+}
+
 sub edit_message
 {
     my ($self, $dest, $msgid, $param, $callback) = @_;
