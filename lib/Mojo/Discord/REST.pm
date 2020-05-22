@@ -749,6 +749,32 @@ sub get_audit_log
     }
 }
 
+sub set_channel_name
+{
+    my ($self, $channel, $name, $callback) = @_;
+    my $url = $self->base_url . "/channels/$channel";
+    my $json = {
+        'name' => $name
+    };
+
+    my $route = "PATCH /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [set_channel_name] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->set_channel_name($channel, $name, $callback) });
+    }
+    else
+    {
+        $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
 1;
 
 =head1 NAME
