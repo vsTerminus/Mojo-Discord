@@ -114,7 +114,7 @@ has no_resume => ( is => 'ro', default => sub {
 });
 
 has token               => ( is => 'ro' );
-has name                => ( is => 'rw', required => 1 );
+has name                => ( is => 'ro', default => 'Mojo::Discord' );
 has url                 => ( is => 'rw', required => 1 );
 has version             => ( is => 'ro', required => 1 );
 has auto_reconnect      => ( is => 'rw' );
