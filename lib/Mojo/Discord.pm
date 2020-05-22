@@ -198,6 +198,14 @@ sub send_message
     $self->rest->send_message($channel, $message, $callback);
 }
 
+# Only supports string (simple messages).
+sub send_message_content_blocking
+{
+    my ($self, $channel, $message, $callback) = @_;
+
+    $self->rest->send_message_content_blocking($channel, $message, $callback);
+}
+
 sub edit_message
 {
     my ($self, $channel, $msgid, $message, $callback) = @_;
