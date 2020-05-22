@@ -16,7 +16,7 @@ use Carp;
 use namespace::clean;
 
 has 'token'         => ( is => 'ro' );
-has 'name'          => ( is => 'rw', required => 1 );
+has 'name'          => ( is => 'ro', default => 'Mojo::Discord' );
 has 'url'           => ( is => 'rw', required => 1 );
 has 'version'       => ( is => 'ro', required => 1 );
 has 'base_url'      => ( is => 'ro', default => 'https://discord.com/api' );
