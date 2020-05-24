@@ -724,6 +724,46 @@ sub delete_all_reactions
     }
 }
 
+sub guild_member_role
+{
+    my ($self, $guildid, $userid, $roleid, $action, $callback) = @_;
+
+    my $route = "GET /guilds/$guildid"; # PUT or DELETE? I'll leave this GET for now until the rate-limiting stuff is touched in general
+                                        # Different HTTP methods MAY share the same route...
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [guild_member_role] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->guild_member_role($guildid, $userid, $roleid, $action, $callback) });
+    }
+    else
+    {
+        my $url = $self->base_url . "/guilds/$guildid/members/$userid/roles/$roleid";
+
+        if ($action) # 1 = add
+        {
+           $self->ua->put($url => sub
+           {
+               my ($ua, $tx) = @_;
+
+               $self->_set_route_rate_limits($route, $tx->res->headers);
+
+               $callback->($tx->res->json) if defined $callback;
+           });
+        }
+        else # 0 = remove
+        {
+           $self->ua->delete($url => sub
+           {
+               my ($ua, $tx) = @_;
+
+               $self->_set_route_rate_limits($route, $tx->res->headers);
+
+               $callback->($tx->res->json) if defined $callback;
+           });
+        }
+    }
+}
+
 sub get_audit_log
 {
     my ($self, $guild_id, $callback) = @_;
