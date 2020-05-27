@@ -313,6 +313,12 @@ sub delete_all_reactions_for_emoji
     $self->rest->delete_all_reactions($channel, $msgid, $emoji, $callback);
 }
 
+sub set_channel_name
+{
+    my ($self, $channel, $name, $callback) = @_;
+    $self->rest->set_channel_name($channel, $name, $callback);
+}
+
 1;
 
 =head1 NAME
