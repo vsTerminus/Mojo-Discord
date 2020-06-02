@@ -15,28 +15,44 @@ use Carp;
 
 use namespace::clean;
 
-has 'token'         => ( is => 'ro' );
-has 'name'          => ( is => 'ro', default => 'Mojo::Discord' );
-has 'url'           => ( is => 'rw', required => 1 );
-has 'version'       => ( is => 'ro', required => 1 );
-has 'base_url'      => ( is => 'ro', default => 'https://discord.com/api' );
-has 'agent'         => ( is => 'lazy', builder => sub { my $self = shift; return $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
-has 'ua'            => ( is => 'lazy', builder => sub 
-                        { 
-                            my $self = shift;
-                            my $ua = Mojo::UserAgent->new;
-                            $ua->transactor->name($self->agent);
-                            $ua->inactivity_timeout(120);
-                            $ua->connect_timeout(5);
-                            $ua->on(start => sub {
-                                my ($ua, $tx) = @_;
-                                $tx->req->headers->authorization("Bot " . $self->token);
-                            });
-                            return $ua;
-                        });
-has 'log'           => ( is => 'ro' );
-has 'rate_limits'   => ( is => 'rwp', default => sub { {} } );
-has 'rate_buckets'  => ( is => 'rwp', default => sub { {} } );
+has 'token'                 => ( is => 'ro' );
+has 'name'                  => ( is => 'ro', default => 'Mojo::Discord' );
+has 'url'                   => ( is => 'rw', required => 1 );
+has 'version'               => ( is => 'ro', required => 1 );
+has 'base_url'              => ( is => 'ro', default => 'https://discord.com/api' );
+has 'agent'                 => ( is => 'lazy', builder => sub { my $self = shift; return $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
+has 'ua'                    => ( is => 'lazy', builder => sub 
+                                { 
+                                    my $self = shift;
+                                    my $ua = Mojo::UserAgent->new;
+                                    $ua->transactor->name($self->agent);
+                                    $ua->inactivity_timeout(120);
+                                    $ua->connect_timeout(5);
+                                    $ua->on(start => sub {
+                                        my ($ua, $tx) = @_;
+                                        $tx->req->headers->authorization("Bot " . $self->token);
+                                    });
+                                    return $ua;
+                                });
+has 'log'                   => ( is => 'ro' );
+has 'rate_buckets'          => ( is => 'rwp', default => sub { {} } );
+has 'rate_bucket_ids'       => ( is => 'rwp', default => sub { {} } );
+
+# Return an anonymous hash with the default rate limits for when we don't have any server-provided values yet.
+sub _default_rate_limits
+{
+    my $route = shift;
+
+    my $limit = 5;
+    $limit = 25 if $route eq 'GET /guilds'; # Doesn't seem to receive ratelimit headers, so we'll limit it arbitrarily.
+
+    return {
+        'limit' => $limit,
+        'reset' => time + 4,
+        'remaining' => $limit,
+        'reset_after' => 4
+    };
+}
 
 # Every REST call returns rate limit information in the header
 # There is a global rate limit, but also a "per-route" limit
@@ -49,25 +65,34 @@ sub _set_route_rate_limits
 {
     my ($self, $route, $headers) = @_;
 
-    my $bucket = $headers->header('x-ratelimit-bucket');
+    my $bucket_id = $headers->header('x-ratelimit-bucket');
+    return undef unless $bucket_id;
 
-    if ( $bucket )
+    $self->rate_bucket_ids->{$route} = $bucket_id;
+    my $cache = $self->rate_buckets->{$bucket_id};
+    
+    my $valid = 0; # Boolean to determine whether headers are valid or outdated.
+
+    # Hopefully deal with receiving headers out of order and setting bad values because of it.
+    if ( $bucket_id and $cache )
     {
-        $self->rate_buckets->{$route} = $bucket;
+        # Valid iff x-ratelimit-reset == current value and x-ratelimit-limit is <= current value
+        $valid = 1 if ( $headers->header('x-ratelimit-reset') == $cache->{'reset'} and
+                        $headers->header('x-ratelimit-remaining') <= $cache->{'remaining'} );
 
-        $self->rate_limits->{$bucket}{'limit'} = $headers->header('x-ratelimit-limit');
-        $self->rate_limits->{$bucket}{'reset'} = $headers->header('x-ratelimit-reset');
-        $self->rate_limits->{$bucket}{'remaining'} = $headers->header('x-ratelimit-remaining');
-        $self->rate_limits->{$bucket}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
-
-        $self->log->debug('[REST.pm] [_set_route_rate_limits] Setting rate limits for Bucket ID ' . $bucket);
+        # Valid if x-ratelimit-rest > current value
+        $valid = 1 if ( $headers->header('x-ratelimit-reset') > $cache->{'reset'} );
     }
-    # Else, Discord didn't return x-ratelimit-bucket headers.
-    # This happens when we first connect, and to my knowledge is safe to ignore.
-    else
-    {
-        #say Data::Dumper->Dump([$headers], ['headers']);
+    
+    # Assuming we have valid ratelimit headers, update our cache.
+    if ( $bucket_id and ( $valid or !defined $cache ) )
+    { 
+        $self->rate_buckets->{$bucket_id}{'limit'} = $headers->header('x-ratelimit-limit');
+        $self->rate_buckets->{$bucket_id}{'reset'} = $headers->header('x-ratelimit-reset');
+        $self->rate_buckets->{$bucket_id}{'remaining'} = $headers->header('x-ratelimit-remaining');
+        $self->rate_buckets->{$bucket_id}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
     }
+    # Else - ignore it, we already have more current information.
 }
 
 # We should also be checking the rate limits (if known) for a route before we send a request.
@@ -75,21 +100,33 @@ sub _set_route_rate_limits
 # If we are not rate limited (or don't have rate limits for this route yet), it will return zero.
 sub _rate_limited
 {
-    my ($self, $route) = @_;
+    my ($self, $route, $view_only) = @_;
 
-    my $bucket_id = $self->rate_buckets->{$route};
-    return undef unless $bucket_id;
+    my $trunc_route = $route;
+    $trunc_route =~ s/((GET|POST|PUT|PATCH|DELETE) \/[a-z]+).*$/$1/i;
 
-    my $bucket = $self->rate_limits->{$bucket_id};
-    return undef unless $bucket;
+    my $bucket_id = $self->rate_bucket_ids->{$route} // $trunc_route;
+    my $bucket = $self->rate_buckets->{$bucket_id};
 
+    # If we don't have up to date rate limit info from the server, use a default bucket.
+    if ( !defined $bucket or $bucket->{'reset'} < time )
+    {
+        $self->rate_buckets->{$bucket_id} = _default_rate_limits($trunc_route); 
+        $bucket = $self->rate_buckets->{$bucket_id};
+    }
 
-    my $remaining = $bucket->{'remaining'};
-    my $reset_after = $bucket->{'reset'} - time;
-
-    $self->log->debug('[REST.pm] [_rate_limited] Bucket ID ' . $bucket_id . ' . Quota ' . $remaining . ' Reset In ' . $reset_after . ' seconds');
-
-    ( $remaining > 0 or $reset_after < 0 ) ? return undef : return $reset_after;
+    if ( $bucket->{'remaining'} >= 1 )
+    {
+        # We have quote left, "grant it" by reducing the remaining count."
+        $bucket->{'remaining'}--;
+    }
+    else
+    {
+        # We don't have quota left. Return the time until they can try again.
+        $self->log->warn('[REST.pm] [_rate_limited] Route "' . $route . '" is rate limited. Reset In ' . $bucket->{'reset_after'} . ' seconds');
+        return $bucket->{'reset_after'};
+    }
+    return 0;
 }
 
 # Validate the format of any channel, user, guild or similar ID.
@@ -151,7 +188,7 @@ sub send_message
     }
 
     my $route = "POST /channels/$dest";
-    if ( my $delay = $self->_rate_limited($route))
+    if ( my $delay = $self->_rate_limited($route) )
     {
         $self->log->warn('[REST.pm] [send_message] Route is rate limited. Trying again in ' . $delay . ' seconds');
         Mojo::IOLoop->timer($delay => sub { $self->send_message($dest, $param, $callback) });
@@ -159,12 +196,23 @@ sub send_message
     else
     {
         my $post_url = $self->base_url . "/channels/$dest/messages";
+
+        # Remove this block
+        #my $bucket_id = $self->rate_bucket_ids->{$route} // 'POST /channels';
+        #my $bucket = $self->rate_buckets->{$bucket_id};
+        #my $rate_limits = ' => Bucket: ' . $bucket_id;
+        #$rate_limits .= ', Remaining: ' . $bucket->{'remaining'};
+        #$rate_limits .= ', Reset: ' . $bucket->{'reset'};
+        #$json->{'content'} .= $rate_limits; 
+        # End Remove
+
         $self->ua->post($post_url => {Accept => '*/*'} => json => $json => sub
         {
             my ($ua, $tx) = @_;
 
-            $self->_set_route_rate_limits($route, $tx->res->headers);
-
+            my $headers = $tx->res->headers;
+            $self->_set_route_rate_limits($route, $headers);
+            
             $callback->($tx->res->json) if defined $callback;
         });
     }
@@ -789,6 +837,32 @@ sub get_audit_log
     }
 }
 
+sub set_channel_name
+{
+    my ($self, $channel, $name, $callback) = @_;
+    my $url = $self->base_url . "/channels/$channel";
+    my $json = {
+        'name' => $name
+    };
+
+    my $route = "PATCH /channels/$channel";
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [set_channel_name] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->set_channel_name($channel, $name, $callback) });
+    }
+    else
+    {
+        $self->ua->patch($url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
 1;
 
 =head1 NAME

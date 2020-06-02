@@ -327,6 +327,12 @@ sub remove_guild_member_role
     $self->rest->guild_member_role($guildid, $userid, $roleid, 0, $callback);
 }
 
+sub set_channel_name
+{
+    my ($self, $channel, $name, $callback) = @_;
+    $self->rest->set_channel_name($channel, $name, $callback);
+}
+
 1;
 
 =head1 NAME
