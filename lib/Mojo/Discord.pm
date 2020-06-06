@@ -319,6 +319,36 @@ sub set_channel_name
     $self->rest->set_channel_name($channel, $name, $callback);
 }
 
+sub get_channel
+{
+	my ($self, $channel, $callback) = @_;
+	$self->rest->get_channel($channel, $callback);
+}
+
+sub delete_webhook_token
+{
+	my ($self, $id, $token, $callback) = @_;
+	$self->rest->delete_webhook_by_token($id, $token, $callback);
+}
+
+sub create_guild_emoji
+{
+	my ($self, $guildid, $name, $emojiid, $callback) = @_;
+	$self->rest->create_guild_emoji($guildid, $name, $emojiid, $callback);
+}
+
+sub delete_guild_emoji
+{
+	my ($self, $guildid, $emojiid, $callback) = @_;
+	$self->rest->delete_guild_emoji($guildid, $emojiid, $callback);
+}
+
+sub get_webhook_token
+{
+	my ($self, $id, $token, $callback) = @_;
+	$self->rest->get_webhook_by_token($id, $token, $callback);
+}
+
 1;
 
 =head1 NAME

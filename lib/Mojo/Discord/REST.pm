@@ -823,6 +823,151 @@ sub set_channel_name
         });
     }
 }
+
+sub get_channel
+{
+	my ($self, $channel, $callback) = @_;
+	
+	unless ( $self->_valid_id('get_channel_message', $channel) )
+	{
+		$callback->(undef) if defined $callback;
+		return;
+	}
+	
+	my $route = "GET /channels";
+	if ( my $delay = $self->_rate_limited($route) )
+	{
+		$self->log->warn('[REST.pm] [get_channel] Route is rate limited. Trying again in ' . $delay . ' seconds');
+		Mojo::IOLoop->timer($delay => sub { $self->get_channel_message($channel, $callback) });
+	}
+	else
+	{
+		my $url = $self->base_url . "/channels/$channel";
+		$self->ua->get($url => sub
+		{
+			my ($ua, $tx) = @_;
+			
+			$self->_set_route_rate_limits($route, $tx->res->headers);
+			
+			$callback->($tx->res->json) if defined $callback;
+		});
+	}
+}
+
+sub delete_webhook_by_token
+{
+	my ($self, $id, $token, $callback) = @_;
+	
+	my $route = "DELETE /webhooks";
+	if ( my $delay = $self->_rate_limited($route) )
+	{
+		$self->log->warn('[REST.pm] [delete_webhook_token] Route is rate limited. Trying again in ' . $delay . ' seconds');
+		Mojo::IOLoop->timer($delay => sub { $self->get_channel_message($id, $token, $callback) });
+	}
+	else
+	{
+		my $url = $self->base_url . "/webhooks/$id/$token";
+		$self->ua->delete($url => sub
+		{
+			my ($ua, $tx) = @_;
+			
+			$self->_set_route_rate_limits($route, $tx->res->headers);
+			
+			$callback->($tx->res->json) if defined $callback;
+		});
+	}
+}
+
+sub create_guild_emoji
+{
+	my ($self, $guildid, $name, $emojifile, $callback) = @_;
+	
+	open(IMAGE, $emojifile);
+    my $raw_string = do{ local $/ = undef; <IMAGE>; };
+    my $base64 = b64_encode( $raw_string );
+    close(IMAGE);
+    
+    my $type = ( $avatar_file =~ /.png$/ ? 'png' : 'jpeg' );
+	
+	my $json = {
+		'name' => $name,
+		'image' => "data:image/$type;base64," . $base64,
+	};
+	
+	my $route = "POST /guilds";
+	if ( my $delay = $self->_rate_limited($route) )
+	{
+		$self->log->warn('[[REST.pm] [create_guild_emoji] Route is rate limited. Trying again in ' . $delay . ' seconds');
+		Mojo::IOLoop->timer($delay => sub { $self->create_guild_emoji($guildid, $name, $emojiid, $callback) });
+	}
+	else
+	{
+		my $url = $self->base_url . "/guilds/$guildid/emojis";
+		$self->ua->post($url => {Accept => '*/*'} => json => $json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
+sub delete_guild_emoji
+{
+	my ($self, $guildid, $emojiid, $callback) = @_;
+
+	my $route = "DELETE /guilds";
+	if ( my $delay = $self->_rate_limited($route) )
+	{
+		$self->log->warn('[[REST.pm] [delete_guild_emoji] Route is rate limited. Trying again in ' . $delay . ' seconds');
+		Mojo::IOLoop->timer($delay => sub { $self->get_channel_message($guildid, $emojiid, $callback) });
+	}
+	else
+	{
+		my $url = $self->base_url . "/guilds/$guildid/emojis/$emojiid";
+		$self->ua->delete($url => sub
+		{
+			my ($ua, $tx) = @_;
+			
+			$self->_set_route_rate_limits($route, $tx->res->headers);
+			
+			$callback->($tx->res->json) if defined $callback;
+		});
+	}
+}
+
+sub get_webhook_by_token
+{
+	my ($self, $id, $token, $callback) = @_;
+	
+	unless ( $self->_valid_id('get_webhook_token', $id) )
+	{
+		$callback->(undef) if defined $callback;
+		return;
+	}
+	
+	my $route = "GET /webhooks";
+	if ( my $delay = $self->_rate_limited($route) )
+	{
+		$self->log->warn('[REST.pm] [get_webhook_token] Route is rate limited. Trying again in ' . $delay . ' seconds');
+		Mojo::IOLoop->timer($delay => sub { $self->get_webhook_token($id, $token, $callback) });
+	}
+	else
+	{
+		my $url = $self->base_url . "/webhooks/$id/$token";
+		$self->ua->get($url => sub
+		{
+			my ($ua, $tx) = @_;
+
+			$self->_set_route_rate_limits($route, $tx->res->headers);
+			
+			$callback->($tx->res->json) if defined $callback;
+		});
+	}
+}
+
 1;
 
 =head1 NAME
