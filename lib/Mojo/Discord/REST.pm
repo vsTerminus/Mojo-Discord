@@ -898,7 +898,7 @@ sub create_guild_emoji
 	if ( my $delay = $self->_rate_limited($route) )
 	{
 		$self->log->warn('[[REST.pm] [create_guild_emoji] Route is rate limited. Trying again in ' . $delay . ' seconds');
-		Mojo::IOLoop->timer($delay => sub { $self->create_guild_emoji($guildid, $name, $emojiid, $callback) });
+		Mojo::IOLoop->timer($delay => sub { $self->create_guild_emoji($guildid, $name, $emojifile, $callback) });
 	}
 	else
 	{
