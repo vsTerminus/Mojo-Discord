@@ -883,11 +883,11 @@ sub create_guild_emoji
 	my ($self, $guildid, $name, $emojifile, $callback) = @_;
 	
 	open(IMAGE, $emojifile);
-    my $raw_string = do{ local $/ = undef; <IMAGE>; };
-    my $base64 = b64_encode( $raw_string );
-    close(IMAGE);
+	my $raw_string = do{ local $/ = undef; <IMAGE>; };
+	my $base64 = b64_encode( $raw_string );
+	close(IMAGE);
     
-    my $type = ( $avatar_file =~ /.png$/ ? 'png' : 'jpeg' );
+    my $type = ( $emojifile =~ /.png$/ ? 'png' : 'gif' );
 	
 	my $json = {
 		'name' => $name,
