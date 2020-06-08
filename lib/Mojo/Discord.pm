@@ -333,7 +333,7 @@ sub delete_webhook_token
 
 sub create_guild_emoji
 {
-	my ($self, $guildid, $name, $emojiid, $callback) = @_;
+	my ($self, $guildid, $name, $emojifile, $callback) = @_;
 	$self->rest->create_guild_emoji($guildid, $name, $emojiid, $callback);
 }
 
