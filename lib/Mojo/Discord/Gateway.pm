@@ -310,7 +310,12 @@ sub gw_connect
     $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
     my $url = $self->gateway();
-    $self->reconnect() unless defined $url;
+    unless (defined $url)
+    {
+        $self->reconnect();
+        return
+    }
+
 
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
     $self->log->debug('[Gateway.pm] [gw_connect] Connecting to ' . $url);
@@ -426,8 +431,11 @@ sub reconnect
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
         }
 
-        $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
-        $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
+        if ($self->reconnect_timer < 300)
+        {
+            $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
+            $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
+        }
     }
     else
     {
