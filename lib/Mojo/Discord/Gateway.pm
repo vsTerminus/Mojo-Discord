@@ -310,7 +310,12 @@ sub gw_connect
     $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
     my $url = $self->gateway();
-    $self->reconnect() unless defined $url;
+    unless (defined $url)
+    {
+        $self->reconnect();
+        return
+    }
+
 
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
     $self->log->debug('[Gateway.pm] [gw_connect] Connecting to ' . $url);
