@@ -109,7 +109,8 @@ has no_resume => ( is => 'ro', default => sub {
         '4003' => 'Not Authenticated',
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
-        '4010' => 'Invalid Shard'
+        '4010' => 'Invalid Shard',
+        'Websocket Handshake Failed' => 'Websocket Handshake Failed'
     } 
 });
 
