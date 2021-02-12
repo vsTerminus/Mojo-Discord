@@ -42,8 +42,7 @@ has rest        => ( is => 'lazy', builder => sub {
                         'base_url'      => $self->base_url,
                         'log'           => $self->log,
                     )});
-has guilds      => ( is => 'rw', default => sub { {} } );
-has channels    => ( is => 'rw', default => sub { {} } );
+has guilds      => ( is => 'rw', default => sub {  } );
 
 # Logging
 has log         => ( is => 'lazy', builder => sub { 
@@ -317,6 +316,12 @@ sub set_channel_name
 {
     my ($self, $channel, $name, $callback) = @_;
     $self->rest->set_channel_name($channel, $name, $callback);
+}
+
+sub guild_for_channel
+{
+    my ( $self, $channel_id ) = @_;
+    return $self->gw->_channel_to_guild($channel_id);
 }
 
 1;

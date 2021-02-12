@@ -17,6 +17,7 @@ use Mojo::Discord::REST;
 use Compress::Zlib;
 use Encode::Guess;
 use Time::Duration;
+use Data::Dumper;
 
 use namespace::clean;
 
@@ -63,6 +64,38 @@ has dispatches => ( is => 'ro', default => sub {
         # More as needed
     }
 });
+
+has intents => ( is => 'ro', default => sub {
+    my $GUILDS                      = 1<<0;
+    my $GUILD_MEMBERS               = 1<<1;
+    my $GUILD_BANS                  = 1<<2;
+    my $GUILD_EMOJIS                = 1<<3;
+    my $GUILD_INTEGRATIONS          = 1<<4;
+    my $GUILD_WEBHOOKS              = 1<<5;
+    my $GUILD_INVITES               = 1<<6;
+    my $GUILD_VOICE_STATES          = 1<<7;
+    my $GUILD_PRESENCES             = 1<<8;
+    my $GUILD_MESSAGES              = 1<<9;
+    my $GUILD_MESSAGE_REACTIONS     = 1<<10;
+    my $GUILD_MESSAGE_TYPING        = 1<<11;
+    my $DIRECT_MESSAGES             = 1<<12;
+    my $DIRECT_MESSAGE_REACTIONS    = 1<<13;
+    my $DIRECT_MESSAGE_TYPING       = 1<<14;
+
+    my $intents =   
+        $GUILDS |
+        $GUILD_MEMBERS |
+        $GUILD_PRESENCES |
+        $GUILD_EMOJIS |
+        $GUILD_WEBHOOKS |
+        $GUILD_MESSAGES |
+        $GUILD_MESSAGE_REACTIONS |
+        $DIRECT_MESSAGES |
+        $DIRECT_MESSAGE_REACTIONS;
+
+    return $intents;
+});
+
 
 # Websocket Close codes defined in RFC 6455, section 11.7.
 # Also includes some Discord-specific codes from the Discord API Reference Docs (Starting at 4000)
@@ -132,12 +165,12 @@ has heartbeat_loop      => ( is => 'rw' );
 has heartbeat           => ( is => 'rw', default => 2 );
 has base_url            => ( is => 'ro', default => 'https://discord.com/api' );
 has gateway_url         => ( is => 'rw', default => sub { shift->base_url . '/gateway' });
-has gateway_version     => ( is => 'ro', default => 6 );
+has gateway_version     => ( is => 'ro', default => 8 );
 has gateway_encoding    => ( is => 'ro', default => 'json' );
 has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this maybe be a config.ini value??
 has agent               => ( is => 'lazy', builder => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
 has allow_resume        => ( is => 'rw', default => 1 );
-has reconnect_timer     => ( is => 'rw', default => 10 );
+has reconnect_timer     => ( is => 'rw', default => 2 );
 has last_connected      => ( is => 'rw', default => 0 );
 has last_disconnect     => ( is => 'rw', default => 0 );
 has ua                  => ( is => 'lazy', builder => sub { 
@@ -158,7 +191,7 @@ has ua                  => ( is => 'lazy', builder => sub {
     return $ua;
 });
 has guilds              => ( is => 'rw', default => sub { {} } );
-has channels            => ( is => 'rw', default => sub { {} } );
+has channel_to_guild    => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
 has webhooks            => ( is => 'rw', default => sub { {} } );
 has rest                => ( is => 'rw' );
@@ -432,9 +465,9 @@ sub reconnect
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
         }
 
-        if ($self->reconnect_timer < 300)
+        if ($self->reconnect_timer < 120) # Wait at most two minutes before attempting to reconnect.
         {
-            $self->reconnect_timer( $self->reconnect_timer*2 ); # Double the timer each time we attempt to reconnect.
+            $self->reconnect_timer( $self->reconnect_timer+2 ); # Wait two seconds more each time we try to reconnect
             $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
         }
     }
@@ -533,7 +566,8 @@ sub send_ident
             '$referring_domain' => ""
         }, 
         "compress" => \1, 
-        "large_threshold" => 50
+        "large_threshold" => 50,
+        "intents" => $self->intents,
     };
 
     $self->log->debug('[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY');
@@ -581,7 +615,7 @@ sub dispatch_ready
     $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . duration($elapsed));
     if ( $elapsed >= 60 )
     {
-        $self->reconnect_timer(10);
+        $self->reconnect_timer(2);
         $self->last_connected(time);
     }
 
@@ -595,9 +629,10 @@ sub dispatch_typing_start
 sub dispatch_message_create
 {
    my ($self, $hash) = @_;
-   my $id = $hash->{'author'}{'id'};
    # Update what we know about people when they talk.
-   $self->add_user($hash->{'author'}) unless exists $self->users->{id};
+
+   #say Dumper($hash);
+   #$self->_member_add($hash->{'author'});
 }
 
 sub dispatch_message_update
@@ -687,8 +722,19 @@ sub _set_guild_channels
         # Here we will build a "channels" hashref that links Channel IDs to Guild IDs.
         # This way we can do just about any operation with only a channel ID to go on.
         # Create a link from the channel ID to the Guild ID
-        $self->channels->{$channel->id} = $guild->id;
+        $self->channel_to_guild->{$channel->id} = $guild->id;
     }
+}
+
+# Takes a channel ID and returns a Guild ID
+# Uses the $self->channel_to_guild mapping created above
+sub _channel_to_guild
+{
+    my ($self, $channel_id) = @_;
+
+    exists $self->channel_to_guild->{$channel_id} ?
+        return $self->channel_to_guild->{$channel_id} :
+        return undef;
 }
 
 # Adds roles to a guild object
@@ -726,20 +772,29 @@ sub _set_guild_emojis
     }
 }
 
+sub _add_guild_member
+{
+    my ($self, $guild, $member_hash) = @_;
+
+    say "Guild " . $guild->{'id'} . " adding Member " . $member_hash->{'user'}->{'id'};
+
+    # Like presences, there is no "member ID" so we'll use the user id instead.
+    $member_hash->{'id'} = $member_hash->{'user'}->{'id'};
+    my $member = $guild->add_member($member_hash);
+
+    # Now we also want to add the user, but this is not a property of the guild; It's a top level entity.
+    my $user_hash = $member_hash->{'user'};
+    my $user = $self->add_user($user_hash);
+}
+
 sub _set_guild_members
 {
     my ($self, $guild, $hash) = @_;
     
     foreach my $member_hash (@{$hash->{'members'}})
     {
-        # Like presences, there is no "member ID" so we'll use the user id instead.
-        $member_hash->{'id'} = $member_hash->{'user'}->{'id'};
-        my $member = $guild->add_member($member_hash);
-
-        # Now we also want to add the user, but this is not a property of the guild; It's a top level entity.
-        my $user_hash = $member_hash->{'user'};
-        my $user = $self->add_user($user_hash);
-        
+        say Dumper($member_hash);
+        $self->_add_guild_member($guild, $member_hash);           
     }
 }
 
@@ -819,7 +874,8 @@ sub dispatch_guild_member_add
 {
     my ($self, $hash) = @_;
 
-    # say Dumper($hash);
+    say "guild member add";
+    #say Dumper($hash);
 
     # Should be able to just call self->set_members.... or guild->add_member
 }
@@ -828,6 +884,7 @@ sub dispatch_guild_member_update
 {
     my ($self, $hash) = @_;
 
+    say "guild member update";
     # say Dumper($hash);
 
 }
@@ -836,6 +893,7 @@ sub dispatch_guild_member_remove
 {
     my ($self, $hash) = @_;
 
+    say "guild_member_remove";
     # say Dumper($hash);
 }
 
@@ -924,7 +982,7 @@ sub on_hello
         sub {
             my $op = 1;
             my $d = $self->s;
-            $self->log->debug('[Gateway.pm] [on_hello] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
+            $self->log->debug('[Gateway.pm] [heartbeat] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
             $self->heartbeat($self->heartbeat-1);
             $self->send_op($op, $d);
         }
@@ -937,6 +995,96 @@ sub on_heartbeat_ack
 
     $self->log->debug('[Gateway.pm] [on_heartbeat_ack] Received OP 11 SEQ ' . $self->s . ' HEARTBEAT ACK');
     $self->heartbeat($self->heartbeat+1);
+}
+
+# Takes a guild ID, a user ID, and a permission string
+# Returns the user's permissions as a string if the user has all of the permissions in the string
+# Returns undef if they are missing any of them
+sub user_has_permission
+{
+    my ($self, $guild_id, $user_id, $permission_string) = @_;
+
+    if ( my $user_permissions = $self->user_permissions($guild_id, $user_id) )
+    {
+        $user_permissions & $permission_string ?
+            return $user_permissions :
+            return undef;
+    }
+
+    return undef;
+}
+
+
+# Takes a guild ID and a User ID and returns that user's permissions on that server as a number (eg '805686336')
+sub user_permissions
+{
+    my ($self, $guild_id, $user_id) = @_;
+
+    my $user_permissions = 0x0;
+
+    if ( my $user_roles = $self->user_roles($guild_id, $user_id) )
+    {
+        say Dumper($user_roles);
+        $self->log->debug('[Gateway.pm] [user_permissions] User ' . $user_id . ' has roles on Guild ' . $guild_id);
+        foreach my $role_id ( keys %$user_roles )
+        {
+            my $role = $user_roles->{$role_id};
+            $self->log->debug('[Gateway.pm] [user_permissions] Role ' . $role->name . ' has permissions ' . $role->permissions);
+            $user_permissions |= $role->permissions;
+        }
+    }
+
+    
+    $self->log->debug('[Gateway.pm] [user_permissions] User ' . $user_id . ' has permissions ' . $user_permissions . ' on Guild ' . $guild_id);
+    return $user_permissions;
+}
+
+# Return an arrayref of user role IDs
+sub user_role_ids
+{
+    my ($self, $guild_id, $user_id) = @_;
+
+    
+    if ( exists $self->guilds->{$guild_id} and 
+         exists $self->guilds->{$guild_id}->members->{$user_id} )
+    {
+        my $member = $self->guilds->{$guild_id}->members->{$user_id};
+        my $roles = $member->roles;
+        my $num_roles = scalar @$roles;
+        $self->log->debug('[Gateway.pm] [user_role_ids] User ' . $user_id . ' has ' . $num_roles . ' roles ids on Guild ' . $guild_id);
+
+        return $member->roles;
+    }
+    $self->log->debug('[Gateway.pm] [user_role_ids] User ' . $user_id . ' is not a member of Guild ' . $guild_id . ' or the guild does not exist');
+    return undef;
+}
+
+# Return a hashref of user roles
+# as Mojo::Discord::Guild::Role objects, not just the IDs.
+sub user_roles
+{
+    my ($self, $guild_id, $user_id) = @_;
+
+    my $role_ids = $self->user_role_ids($guild_id, $user_id);
+
+    if ( scalar @$role_ids > 0 )
+    {
+        my $roles = {};
+        $self->log->debug('[Gateway.pm] [user_roles] User ' . $user_id . ' has ' . scalar @{$role_ids} . ' roles on Guild ' . $guild_id);
+        my $guild = $self->guilds->{$guild_id};
+        my $member = $self->guilds->{$guild_id}->members->{$user_id};
+
+        foreach my $role_id (@{$role_ids})
+        {
+            my $role = $guild->roles->{$role_id};
+            $roles->{$role_id} = $role;
+        }
+
+        return $roles;
+    }
+
+    $self->log->debug('[Gateway.pm] [user_roles] User ' . $user_id . ' has no role IDs on Guild ' . $guild_id);
+    return undef;
 }
 
 1;
