@@ -677,6 +677,10 @@ sub _create_guild
     my $guild = Mojo::Discord::Guild->new();
     $self->_update_guild($guild, $hash);
 
+    
+    $self->log->debug('CREATE_GUILD Payload:');
+    $self->log->debug(Data::Dumper->Dump([$hash], ['hash']));
+
     return $guild;
 }
 
@@ -737,6 +741,19 @@ sub _channel_to_guild
         return undef;
 }
 
+# Add or update a single role
+sub _add_guild_role
+{
+    my ($self, $hash) = @_;
+
+    my $role = $hash->{'role'};
+    my $guild_id = $hash->{'guild_id'};
+    my $guild = $self->guilds->{$guild_id};
+
+    $guild->add_role($role);
+}
+
+
 # Adds roles to a guild object
 # Takes a Mojo::Discord::Guild object and a discord guild perl hash.
 sub _set_guild_roles
@@ -776,7 +793,19 @@ sub _add_guild_member
 {
     my ($self, $guild, $member_hash) = @_;
 
-    say "Guild " . $guild->{'id'} . " adding Member " . $member_hash->{'user'}->{'id'};
+    # Accept guild hash or guild id as string.
+    my $guild_id;
+    if ( ref $guild eq 'Mojo::Discord::Guild' )
+    {
+        $guild_id = $guild->{'id'};
+    }
+    else
+    {
+        $guild_id = $guild;
+        $guild = $self->guilds->{$guild_id};
+    }
+
+    # say "Guild id " . $guild_id . " storing member data for user id " . $member_hash->{'user'}->{'id'};
 
     # Like presences, there is no "member ID" so we'll use the user id instead.
     $member_hash->{'id'} = $member_hash->{'user'}->{'id'};
@@ -793,7 +822,7 @@ sub _set_guild_members
     
     foreach my $member_hash (@{$hash->{'members'}})
     {
-        say Dumper($member_hash);
+        #say Dumper($member_hash);
         $self->_add_guild_member($guild, $member_hash);           
     }
 }
@@ -808,6 +837,8 @@ sub dispatch_guild_create
    
     # Parse the hash and create a Mojo::Discord::Guild object
     my $guild = $self->_create_guild($hash);
+
+    $self->log->debug("Joining Guild " . $guild->id . " => '" . $guild->name . "'");
 
     # Store it in our guilds hash.
     $self->guilds->{$guild->id} = $guild;
@@ -874,10 +905,8 @@ sub dispatch_guild_member_add
 {
     my ($self, $hash) = @_;
 
-    say "guild member add";
-    #say Dumper($hash);
-
-    # Should be able to just call self->set_members.... or guild->add_member
+    say "guild_member_add";
+    $self->_add_guild_member($hash->{'guild_id'}, $hash);
 }
 
 sub dispatch_guild_member_update
@@ -885,8 +914,7 @@ sub dispatch_guild_member_update
     my ($self, $hash) = @_;
 
     say "guild member update";
-    # say Dumper($hash);
-
+    $self->_add_guild_member($hash->{'guild_id'}, $hash);
 }
 
 sub dispatch_guild_member_remove
@@ -894,26 +922,102 @@ sub dispatch_guild_member_remove
     my ($self, $hash) = @_;
 
     say "guild_member_remove";
-    # say Dumper($hash);
+    my $user_id = $hash->{'user'}{'id'};
+    my $guild_id = $hash->{'guild_id'};
+    my $guild = $self->guilds->{$guild_id};
+    $guild->remove_member($user_id);
 }
 
 sub dispatch_guild_members_chunk
 {
     my ($self, $hash) = @_;
 
-    #  say Dumper($hash);
+    say "guild members chunk";
+    say Dumper($hash);
 } 
 
-sub dispatch_guild_emojis_update{}
-sub dispatch_guild_role_create{}
-sub dispatch_guild_role_update{}
-sub dispatch_guild_role_delete{}
-sub dispatch_user_settings_update{}
-sub dispatch_user_update{}
-sub dispatch_channel_create{}
-sub dispatch_channel_modify{}
-sub dispatch_channel_delete{}
-sub dispatch_presence_update{}
+sub dispatch_guild_emojis_update
+{
+    my ($self, $hash) = @_;
+
+    say "emojis update";
+    say Dumper($hash);
+}
+
+sub dispatch_guild_role_create
+{
+    my ($self, $hash) = @_;
+
+    say "role create";
+    $self->_add_role($hash);
+}
+
+sub dispatch_guild_role_update
+{
+    my ($self, $hash) = @_;
+
+    say "role update";
+    $self->_add_role($hash);
+}
+
+sub dispatch_guild_role_delete
+{
+    my ($self, $hash) = @_;
+
+    say "role delete";
+    my $role_id = $hash->{'role_id'};
+    my $guild_id = $hash->{'guild_id'};
+    my $guild = $self->guilds->{$guild_id};
+    $guild->remove_role($role_id);
+}
+
+sub dispatch_user_settings_update
+{
+    my ($self, $hash) = @_;
+
+    say "user settings update";
+    say Dumper($hash);
+}
+
+sub dispatch_user_update
+{
+    my ($self, $hash) = @_;
+
+    say "user update";
+    say Dumper($hash);
+}
+
+sub dispatch_channel_create
+{
+    my ($self, $hash) = @_;
+
+    say "channel create";
+    say Dumper($hash);
+}
+
+sub dispatch_channel_modify
+{
+    my ($self, $hash) = @_;
+
+    say "channel modify";
+    say Dumper($hash);
+}
+
+sub dispatch_channel_delete
+{
+    my ($self, $hash) = @_;
+
+    say "channel delete";
+    say Dumper($hash);
+}
+
+sub dispatch_presence_update
+{
+    my ($self, $hash) = @_;
+    
+    #say "Presence Update";
+    #say Dumper($hash);
+}
 
 sub dispatch_webhooks_update
 {

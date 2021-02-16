@@ -103,9 +103,9 @@ sub add_channel
 
 sub remove_channel
 {
-#    my ($self, $channel_id) = @_;
+    my ($self, $channel_id) = @_;
 
-#    delete $self->channels->{$channel_id};
+    delete $self->channels->{$channel_id};
 }
 
 sub add_role
@@ -124,9 +124,9 @@ sub add_role
 
 sub remove_role
 {
-#    my ($self, $role_id) = @_;
+    my ($self, $role_id) = @_;
 
-#    delete $self->roles{$role_id};
+    delete $self->roles->{$role_id};
 }
 
 sub add_presence
@@ -187,9 +187,9 @@ sub add_member
 
 sub remove_member
 {
-#    my ($self, $member_id) = @_;
+    my ($self, $member_id) = @_;
 
-#    delete $self->members{$member_id};
+    delete $self->members->{$member_id};
 }
 
 1;
