@@ -44,6 +44,7 @@ sub _default_rate_limits
     my $route = shift;
 
     my $limit = 5;
+    $limit = 1 if $route =~ /^PUT \/channels/i; # adding reactions has to be done slowly.
     $limit = 25 if $route eq 'GET /guilds'; # Doesn't seem to receive ratelimit headers, so we'll limit it arbitrarily.
 
     return {
@@ -675,7 +676,7 @@ sub create_reaction
 {
     my ($self, $channel, $msgid, $emoji, $callback) = @_;
 
-    my $route = "GET /channels/$channel";
+    my $route = "PUT /channels/$channel";
     if ( my $delay = $self->_rate_limited($route) )
     {
         $self->log->warn('[REST.pm] [create_reaction] Route is rate limited. Trying again in ' . $delay . ' seconds');
