@@ -676,10 +676,6 @@ sub _create_guild
     my $guild = Mojo::Discord::Guild->new();
     $self->_update_guild($guild, $hash);
 
-    
-    $self->log->debug('CREATE_GUILD Payload:');
-    $self->log->debug(Data::Dumper->Dump([$hash], ['hash']));
-
     return $guild;
 }
 
@@ -925,7 +921,7 @@ sub dispatch_guild_emojis_update
     my ($self, $hash) = @_;
 
     say "emojis update";
-    say Dumper($hash);
+    #say Dumper($hash);
 }
 
 sub dispatch_guild_role_create
