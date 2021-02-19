@@ -134,6 +134,14 @@ sub send_ack_dm
     $self->rest->send_ack_dm($message_id, $user_id, $message, $callback);
 }
 
+# Acknowledge a command by adding a white check mark emoji reaction and nothing else
+sub send_ack
+{
+    my ($self, $channel_id, $message_id) = @_;
+
+    $self->rest->create_reaction($channel_id, $message_id, "\x{2705}");
+}
+
 # Works like send_message, but takes a user ID and creates a DM first.
 sub send_dm
 {
