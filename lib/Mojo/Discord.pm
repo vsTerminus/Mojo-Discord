@@ -186,7 +186,7 @@ sub get_guilds
 sub get_guild
 {
     my ($self, $guild_id) = @_;
-    return $self->gw->guilds->{$guild_id};
+    defined $guild_id ? return $self->gw->guilds->{$guild_id} : return undef;
 }
 
 sub leave_guild
