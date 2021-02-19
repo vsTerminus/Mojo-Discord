@@ -49,9 +49,9 @@ sub _default_rate_limits
 
     return {
         'limit' => $limit,
-        'reset' => time + 4,
+        'reset' => time + 1,
         'remaining' => $limit,
-        'reset_after' => 4
+        'reset_after' => 1
     };
 }
 
