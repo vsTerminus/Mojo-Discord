@@ -191,7 +191,6 @@ has ua                  => ( is => 'lazy', builder => sub {
     return $ua;
 });
 has guilds              => ( is => 'rw', default => sub { {} } );
-has channel_to_guild    => ( is => 'rw', default => sub { {} } );
 has users               => ( is => 'rw', default => sub { {} } );
 has webhooks            => ( is => 'rw', default => sub { {} } );
 has rest                => ( is => 'rw' );
@@ -719,26 +718,11 @@ sub _set_guild_channels
     {
         # Add the channel
         my $channel = $guild->add_channel($channel_hash);
-   
-        # Channels requires an extra step
-        # Since messages only give you the channel ID we need an easy way to figure out which Guild that channel belongs to
-        # so we can look up roles and permissions and stuff without having to iterate through every guild entry every time.
-        # Here we will build a "channels" hashref that links Channel IDs to Guild IDs.
-        # This way we can do just about any operation with only a channel ID to go on.
-        # Create a link from the channel ID to the Guild ID
-        $self->channel_to_guild->{$channel->id} = $guild->id;
+
+        # One additional step - Just in case we only have the channel object it would help to know the guild ID it belongs to.
+        my $channel_id = $channel_hash->{'id'};
+        my $guild_id = $guild->id;
     }
-}
-
-# Takes a channel ID and returns a Guild ID
-# Uses the $self->channel_to_guild mapping created above
-sub _channel_to_guild
-{
-    my ($self, $channel_id) = @_;
-
-    exists $self->channel_to_guild->{$channel_id} ?
-        return $self->channel_to_guild->{$channel_id} :
-        return undef;
 }
 
 # Add or update a single role
@@ -949,7 +933,7 @@ sub dispatch_guild_role_create
     my ($self, $hash) = @_;
 
     say "role create";
-    $self->_add_role($hash);
+    $self->_add_guild_role($hash);
 }
 
 sub dispatch_guild_role_update
@@ -957,7 +941,7 @@ sub dispatch_guild_role_update
     my ($self, $hash) = @_;
 
     say "role update";
-    $self->_add_role($hash);
+    $self->_add_guild_role($hash);
 }
 
 sub dispatch_guild_role_delete
@@ -1128,7 +1112,7 @@ sub user_permissions
 
     if ( my $user_roles = $self->user_roles($guild_id, $user_id) )
     {
-        say Dumper($user_roles);
+        # say Dumper($user_roles);
         $self->log->debug('[Gateway.pm] [user_permissions] User ' . $user_id . ' has roles on Guild ' . $guild_id);
         foreach my $role_id ( keys %$user_roles )
         {

@@ -92,6 +92,9 @@ sub add_channel
     my $id = $args->{'id'};
     die("Cannot add a channel without an id.\nDied ") unless defined $id;
 
+    # Add the guild ID to the object
+    $args->{'guild_id'} = $self->id;
+
     my $channel = Mojo::Discord::Guild::Channel->new($args);
     $self->channels->{$id} = $channel;
 

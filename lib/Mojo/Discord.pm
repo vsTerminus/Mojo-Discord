@@ -175,6 +175,12 @@ sub get_guilds
     $self->rest->get_guilds($user, $callback);
 }
 
+sub get_guild
+{
+    my ($self, $guild_id) = @_;
+    return $self->gw->guilds->{$guild_id};
+}
+
 sub leave_guild
 {
     my ($self, $user, $guild, $callback) = @_;
@@ -318,11 +324,41 @@ sub set_channel_name
     $self->rest->set_channel_name($channel, $name, $callback);
 }
 
-sub guild_for_channel
+sub add_guild_member_role
 {
-    my ( $self, $channel_id ) = @_;
-    return $self->gw->_channel_to_guild($channel_id);
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    $self->rest->add_guild_member_role($guild_id, $user_id, $role_id, $callback);
 }
+
+sub add_guild_member_role_p
+{
+    my ($self, $guild_id, $user_id, $role_id) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->add_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
+
+sub remove_guild_member_role
+{
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    $self->rest->remove_guild_member_role($guild_id, $user_id, $role_id, $callback);
+}
+
+sub remove_guild_member_role_p
+{
+    my ($self, $guild_id, $user_id, $role_id) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->remove_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
 
 1;
 
