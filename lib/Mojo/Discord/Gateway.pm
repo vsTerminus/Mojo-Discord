@@ -689,7 +689,7 @@ sub _update_guild
     $self->_set_guild_channels($guild, $hash);
     $self->_set_guild_roles($guild, $hash);
     $self->_set_guild_presences($guild, $hash);
-    $self->_set_guild_emojis($guild, $hash);
+    $self->_set_guild_emojis($hash); # None of these need the guild to be passed in anymore, but I haven't updated the rest to get it from the hash themselves.
     $self->_set_guild_members($guild, $hash);
     # TO-DO: features and voice states
 }
@@ -761,8 +761,14 @@ sub _set_guild_presences
 
 sub _set_guild_emojis
 {
-    my ($self, $guild, $hash) = @_;
+    my ($self, $hash) = @_;
+   
+    return undef unless exists $hash->{'guild_id'};
+    my $guild_id =  $hash->{'guild_id'};
     
+    return undef unless exists $self->guilds->{$guild_id};
+    my $guild = $self->guilds->{$guild_id};
+
     foreach my $emoji_hash (@{$hash->{'emojis'}})
     {
         my $emoji = $guild->add_emoji($emoji_hash);
@@ -921,7 +927,7 @@ sub dispatch_guild_emojis_update
     my ($self, $hash) = @_;
 
     say "emojis update";
-    #say Dumper($hash);
+    $self->_set_guild_emojis($hash);
 }
 
 sub dispatch_guild_role_create
