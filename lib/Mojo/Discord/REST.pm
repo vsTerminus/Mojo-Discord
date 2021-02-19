@@ -823,6 +823,57 @@ sub set_channel_name
         });
     }
 }
+
+sub add_guild_member_role
+{
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    my $url = $self->base_url . "/guilds/$guild_id/members/$user_id/roles/$role_id";
+
+    my $route = "PUT /guilds/$guild_id";
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [add_guild_member_role] Route is being rate limited. Try again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->add_guild_member_role($guild_id, $user_id, $role_id) });
+    }
+    else
+    {
+        $self->ua->put($url => {Accept => '*/*'} => json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
+sub remove_guild_member_role
+{
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    my $url = $self->base_url . "/guilds/$guild_id/members/$user_id/roles/$role_id";
+
+    my $route = "DELETE /guilds/$guild_id";
+    if ( my $delay = $self->_rate_limited($route))
+    {
+        $self->log->warn('[REST.pm] [remove_guild_member_role] Route is being rate limited. Try again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->add_guild_member_role($guild_id, $user_id, $role_id) });
+    }
+    else
+    {
+        $self->ua->delete($url => {Accept => '*/*'} => json => sub
+        {
+            my ($ua, $tx) = @_;
+
+            $self->_set_route_rate_limits($route, $tx->res->headers);
+
+            $callback->($tx->res->json) if defined $callback;
+        });
+    }
+}
+
 1;
 
 =head1 NAME
