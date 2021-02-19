@@ -45,7 +45,7 @@ sub _default_rate_limits
 
     my $limit = 5;
     $limit = 1 if $route =~ /^PUT \/channels/i; # adding reactions has to be done slowly.
-    $limit = 25 if $route eq 'GET /guilds'; # Doesn't seem to receive ratelimit headers, so we'll limit it arbitrarily.
+    $limit = 50 if $route eq 'GET /guilds'; # Doesn't seem to receive ratelimit headers, so we'll limit it arbitrarily.
 
     return {
         'limit' => $limit,
