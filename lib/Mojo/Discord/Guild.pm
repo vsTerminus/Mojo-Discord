@@ -178,7 +178,7 @@ sub add_member
 {
     my ($self, $args) = @_;
 
-    my $id = $args->{'id'};
+    my $id = $args->{'user'}{'id'};
     die("Cannot add a member without an id.\nDied ") unless defined $id;
 
     my $member = Mojo::Discord::Guild::Member->new($args);
