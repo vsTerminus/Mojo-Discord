@@ -743,6 +743,8 @@ sub _add_guild_role
     my $role = $hash->{'role'};
     my $guild_id = $hash->{'guild_id'};
     my $guild = $self->guilds->{$guild_id};
+    
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
 
     $guild->add_role($role);
 }
@@ -757,6 +759,8 @@ sub _set_guild_roles
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
     
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
+    
     foreach my $role_hash (@{$hash->{'roles'}})
     {
         my $role = $guild->add_role($role_hash);
@@ -770,6 +774,8 @@ sub _set_guild_presences
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
     
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
+    
     foreach my $presence_hash (@{$hash->{'presences'}})
     {
         # Presences don't have an id, so we'll use the user ID as the presence ID.
@@ -782,12 +788,15 @@ sub _set_guild_presences
 sub _set_guild_emojis
 {
     my ($self, $hash) = @_;
-   
+ 
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
     
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
+
     foreach my $emoji_hash (@{$hash->{'emojis'}})
     {
+
         my $emoji = $guild->add_emoji($emoji_hash);
     }
 }
@@ -798,14 +807,9 @@ sub _add_guild_member
 
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
+    
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
 
-    unless ( defined $guild and ref $guild eq 'Mojo::Discord::Guild' )
-    {
-        $self->log->debug('[Gateway.pm] [_add_guild_member] Guild object is undefined, cannot continue. Received: ');
-        $self->log->debug(Dumper($hash));
-        return undef;
-    }
-   
     my $member = $guild->add_member($hash);
 
     # Now we also want to add the user, but this is not a property of the guild; It's a top level entity.
@@ -819,6 +823,8 @@ sub _set_guild_members
 
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
+
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
 
     foreach my $member_hash (@{$hash->{'members'}})
     {
@@ -839,6 +845,7 @@ sub dispatch_guild_create
     my $guild = $self->_create_guild($hash);
 
     $self->log->debug("Joining Guild " . $guild->id . " => '" . $guild->name . "'");
+    say "Joining Guild " . $guild->id . " => " . $guild->name;
 
     # To-Do:
     # Check current permissions to see whether or not I can fetch the entire guild's list of webhooks
@@ -910,7 +917,6 @@ sub dispatch_guild_member_update
 {
     my ($self, $hash) = @_;
 
-    #say "guild member update";
     #say Dumper($hash);
     $self->_add_guild_member($hash);
 }
@@ -919,10 +925,12 @@ sub dispatch_guild_member_remove
 {
     my ($self, $hash) = @_;
 
-    #say "guild_member_remove";
     my $user_id = $hash->{'user'}{'id'};
     my $guild_id = $hash->{'guild_id'};
     my $guild = $self->guilds->{$guild_id};
+
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
+    
     $guild->remove_member($user_id);
 }
 
@@ -938,7 +946,6 @@ sub dispatch_guild_emojis_update
 {
     my ($self, $hash) = @_;
 
-    #say "emojis update";
     $self->_set_guild_emojis($hash);
 }
 
@@ -966,6 +973,9 @@ sub dispatch_guild_role_delete
     my $role_id = $hash->{'role_id'};
     my $guild_id = $hash->{'guild_id'};
     my $guild = $self->guilds->{$guild_id};
+    
+    return undef unless defined $guild; # Ignore the event if we aren't aware of the guild
+    
     $guild->remove_role($role_id);
 }
 
@@ -1105,7 +1115,7 @@ sub on_heartbeat_ack
 sub user_has_permission
 {
     my ($self, $guild_id, $user_id, $permission_string) = @_;
-
+    
     if ( my $user_permissions = $self->user_permissions($guild_id, $user_id) )
     {
         $user_permissions & $permission_string ?
