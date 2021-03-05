@@ -92,6 +92,9 @@ sub add_channel
     my $id = $args->{'id'};
     die("Cannot add a channel without an id.\nDied ") unless defined $id;
 
+    # Add the guild ID to the object
+    $args->{'guild_id'} = $self->id;
+
     my $channel = Mojo::Discord::Guild::Channel->new($args);
     $self->channels->{$id} = $channel;
 
@@ -103,9 +106,9 @@ sub add_channel
 
 sub remove_channel
 {
-#    my ($self, $channel_id) = @_;
+    my ($self, $channel_id) = @_;
 
-#    delete $self->channels->{$channel_id};
+    delete $self->channels->{$channel_id};
 }
 
 sub add_role
@@ -124,9 +127,9 @@ sub add_role
 
 sub remove_role
 {
-#    my ($self, $role_id) = @_;
+    my ($self, $role_id) = @_;
 
-#    delete $self->roles{$role_id};
+    delete $self->roles->{$role_id};
 }
 
 sub add_presence
@@ -175,7 +178,7 @@ sub add_member
 {
     my ($self, $args) = @_;
 
-    my $id = $args->{'id'};
+    my $id = $args->{'user'}{'id'};
     die("Cannot add a member without an id.\nDied ") unless defined $id;
 
     my $member = Mojo::Discord::Guild::Member->new($args);
@@ -187,9 +190,9 @@ sub add_member
 
 sub remove_member
 {
-#    my ($self, $member_id) = @_;
+    my ($self, $member_id) = @_;
 
-#    delete $self->members{$member_id};
+    delete $self->members->{$member_id};
 }
 
 1;

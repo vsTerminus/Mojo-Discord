@@ -42,8 +42,7 @@ has rest        => ( is => 'lazy', builder => sub {
                         'base_url'      => $self->base_url,
                         'log'           => $self->log,
                     )});
-has guilds      => ( is => 'rw', default => sub { {} } );
-has channels    => ( is => 'rw', default => sub { {} } );
+has guilds      => ( is => 'rw', default => sub {  } );
 
 # Logging
 has log         => ( is => 'lazy', builder => sub { 
@@ -135,6 +134,14 @@ sub send_ack_dm
     $self->rest->send_ack_dm($message_id, $user_id, $message, $callback);
 }
 
+# Acknowledge a command by adding a white check mark emoji reaction and nothing else
+sub send_ack
+{
+    my ($self, $channel_id, $message_id) = @_;
+
+    $self->rest->create_reaction($channel_id, $message_id, "\x{2705}");
+}
+
 # Works like send_message, but takes a user ID and creates a DM first.
 sub send_dm
 {
@@ -174,6 +181,12 @@ sub get_guilds
     my ($self, $user, $callback) = @_;
 
     $self->rest->get_guilds($user, $callback);
+}
+
+sub get_guild
+{
+    my ($self, $guild_id) = @_;
+    defined $guild_id ? return $self->gw->guilds->{$guild_id} : return undef;
 }
 
 sub leave_guild
@@ -332,6 +345,42 @@ sub set_channel_name
     my ($self, $channel, $name, $callback) = @_;
     $self->rest->set_channel_name($channel, $name, $callback);
 }
+
+sub add_guild_member_role
+{
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    $self->rest->add_guild_member_role($guild_id, $user_id, $role_id, $callback);
+}
+
+sub add_guild_member_role_p
+{
+    my ($self, $guild_id, $user_id, $role_id) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->add_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
+
+sub remove_guild_member_role
+{
+    my ($self, $guild_id, $user_id, $role_id, $callback) = @_;
+
+    $self->rest->remove_guild_member_role($guild_id, $user_id, $role_id, $callback);
+}
+
+sub remove_guild_member_role_p
+{
+    my ($self, $guild_id, $user_id, $role_id) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->remove_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
+
+    return $promise;
+};
 
 1;
 

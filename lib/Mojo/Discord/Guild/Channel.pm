@@ -5,6 +5,7 @@ use Moo;
 use strictures 2;
 
 has id                      => ( is => 'rw' );
+has guild_id                => ( is => 'rw' );
 has last_message_id         => ( is => 'rw' );
 has position                => ( is => 'rw' );
 has permission_overwrites   => ( is => 'rw' );
