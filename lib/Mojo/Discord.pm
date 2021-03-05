@@ -326,20 +326,6 @@ sub delete_all_reactions_for_emoji
     $self->rest->delete_all_reactions($channel, $msgid, $emoji, $callback);
 }
 
-sub add_guild_member_role
-{
-    my ($self, $guildid, $userid, $roleid, $callback) = @_;
-
-    $self->rest->guild_member_role($guildid, $userid, $roleid, 1, $callback);
-}
-
-sub remove_guild_member_role
-{
-    my ($self, $guildid, $userid, $roleid, $callback) = @_;
-
-    $self->rest->guild_member_role($guildid, $userid, $roleid, 0, $callback);
-}
-
 sub set_channel_name
 {
     my ($self, $channel, $name, $callback) = @_;
