@@ -594,7 +594,7 @@ L<Mojo::Discord> provides the following subs you may want to leverage
 =head2 get_guild_webhooks
     Takes a guild ID and returns a list of webhooks for all channels in the guild via callback
 
-=head2 add_reaction
+=head2 create_reaction
     Takes a channel ID, a message ID, an Emoji (either Unicode or in the custom emoji format) and an optional callback
     Adds the emoji to the message as a reaction
 
