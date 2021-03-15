@@ -147,7 +147,6 @@ has no_resume => ( is => 'ro', default => sub {
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
         '4010' => 'Invalid Shard',
-        '4010' => 'Invalid Shard',
         '4011' => 'Sharding required',
         '4012' => 'Invalid API version',
         '4013' => 'Invalid intent(s)',
