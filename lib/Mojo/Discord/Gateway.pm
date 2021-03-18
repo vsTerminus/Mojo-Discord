@@ -467,18 +467,18 @@ sub reconnect
         if ( $self->allow_resume )
         {
             $self->log->info('[Gateway.pm] [reconnect] Reconnecting and resuming previous session.');
-            Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 1) });
+            $self->gw_connect('resume' => 1); # Don't wait, reconnect immediately
         }
         else
         {
-            $self->log->info('[Gateway.pm] [reconnect] Reconnecting and starting a new session.');
+            $self->log->info('[Gateway.pm] [reconnect] Reconnecting and starting a new session (After waiting ' . $self->reconnect_timer .' seconds)');
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
-        }
 
-        if ($self->reconnect_timer < 120) # Wait at most two minutes before attempting to reconnect.
-        {
-            $self->reconnect_timer( $self->reconnect_timer+2 ); # Wait two seconds more each time we try to reconnect
-            $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
+            if ($self->reconnect_timer < 120) # Wait at most two minutes before attempting to reconnect.
+            {
+                $self->reconnect_timer( $self->reconnect_timer+2 ); # Wait two seconds more each time we try to reconnect
+                $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
+            }
         }
     }
     else
@@ -625,7 +625,7 @@ sub dispatch_ready
     $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . duration($elapsed));
     if ( $elapsed >= 60 )
     {
-        $self->reconnect_timer(2);
+        $self->reconnect_timer(int(rand(5))+1); # Random value from 1-5 seconds
         $self->last_connected(time);
     }
 
