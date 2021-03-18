@@ -513,7 +513,9 @@ sub start_typing
     {
         my $typing_url = $self->base_url . "/channels/$dest/typing";
 
-        $self->ua->post($typing_url, sub
+        # Mojo::UserAgent 9.07 stops sending Content-Length when it is zero in cases like this.
+        # Manually adding the header doesn't seem to correct the issue, but passing a single character in the body does and discord seems to accept it.
+        $self->ua->post($typing_url => '.' => sub
         {
             my ($ua, $tx) = @_;
 
@@ -686,7 +688,9 @@ sub create_reaction
     {
         my $url = $self->base_url . "/channels/$channel/messages/$msgid/reactions/" . uri_escape_utf8($emoji) . '/@me';
 
-        $self->ua->put($url => sub
+        # Mojo::UserAgent 9.07 stops sending Content-Length when it is zero in cases like this.
+        # Manually adding the header doesn't seem to correct the issue, but passing a single character in the body does and discord seems to accept it.
+        $self->ua->put($url => '.' => sub
         {
             my ($ua, $tx) = @_;
  
