@@ -477,7 +477,7 @@ sub reconnect
             if ($self->reconnect_timer < 120) # Wait at most two minutes before attempting to reconnect.
             {
                 $self->reconnect_timer( $self->reconnect_timer+2 ); # Wait two seconds more each time we try to reconnect
-                $self->log->debug('[Gateway.pm] [reconnect] Reconnect timer increased to ' . $self->reconnect_timer . ' seconds');
+                $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
             }
         }
     }
@@ -580,7 +580,7 @@ sub send_ident
         "intents" => $self->intents,
     };
 
-    $self->log->debug("[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY");
+    $self->log->debug('[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY');
     $self->send_op($op, $d);
 }
 
@@ -590,14 +590,14 @@ sub send_resume
     my ($self, $tx) = @_;
 
     my $op = 6;
-    my $s = $self->s-1;
+    my $s = $self->s;
     my $d = {
         "token"         => $self->token,
         "session_id"    => $self->session_id,
-        "seq"           => $s
+        "seq"           => $self->s
     };
 
-    $self->log->debug("[Gateway.pm] [send_resume] Sending OP $op SEQ $s RESUME");
+    $self->log->debug('[Gateway.pm] [send_resume] Sending OP $op SEQ $s RESUME');
     $self->send_op($op, $d);
 }
 
