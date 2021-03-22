@@ -1082,7 +1082,7 @@ sub on_invalid_session
 
     if (defined $d && $d eq JSON->true) { # FIXME: untested
         $self->allow_resume(1); # Session may be resumable.
-	$msg .= ' (Possibly Resumable)';
+        $msg .= ' (Possibly Resumable)';
     }
     else {
         $self->allow_resume(0); # Have to establish a new session for this.
