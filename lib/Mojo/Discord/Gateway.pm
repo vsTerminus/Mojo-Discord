@@ -382,15 +382,15 @@ sub gw_connect
         # connection with code 1009 - Message Too Long.
         # We can up the length here or by setting the MOJO_MAX_WEBSOCKET_SIZE environment variable.
         $tx->max_websocket_size($self->max_websocket_size);
-        
+
         $self->log->info('[Gateway.pm] [gw_connect] WebSocket Connection Established');
         $self->heartbeat(2); # Always make sure this is set to 2 on a new connection.
-        
+
         # If this is a new connection, send OP 2 IDENTIFY
         # If we are reconnecting, send OP 6 RESUME
         ($resume and $self->auto_reconnect and $self->allow_resume ) ? 
             send_resume($self, $tx) : send_ident($self, $tx);
-        
+
         # Reset the state of allow_resume now that we have reconnected.
         $self->allow_resume(1);
 
@@ -399,12 +399,12 @@ sub gw_connect
             my ($tx, $code, $reason) = @_;
             $self->on_finish($code, $reason);
         }); 
-        
+
         $self->tx->on(json => sub {
             my ($tx, $msg) = @_;
             $self->on_json($tx, $msg);
         });
-        
+
         # This is the main loop - It handles all incoming messages from the server.
         $self->tx->on(message => sub {
             my ($tx, $msg) = @_;
@@ -503,10 +503,10 @@ sub on_message
         if ( defined $uncompressed )
         {
             # This message was compressed! We should handle it, because on_json won't be able to.
-             
+
             # Decode the JSON message into a perl structure
             my $hash = decode_json($uncompressed);
-    
+
             $self->handle_event($tx, $hash);
         }
     }
@@ -533,7 +533,7 @@ sub handle_event
     $op_msg .= " SEQ " . $s if defined $s;
     $op_msg .= " " . $t if defined $t;
 
-    $self->s($s) if defined $s;    # Update the latest Sequence Number.
+    $self->s($s) if defined $s; # Update the latest Sequence Number. Probably more correct would be doing this in on_dispatch as s and t are null when op is not 0
 
     if ( exists $self->handlers->{$op} )
     {
@@ -569,18 +569,16 @@ sub send_ident
     my $d = {
         "token" => $self->token, 
         "properties" => { 
-            '$os' => $^O, 
-            '$browser' => $self->name, 
-            '$device' => $self->name, 
-            '$referrer' => "", 
-            '$referring_domain' => ""
+            '$os'      => $^O,
+            '$browser' => $self->name,
+            '$device'  => $self->name
         }, 
-        "compress" => \1, 
+        "compress"        => \1,
         "large_threshold" => 50,
-        "intents" => $self->intents,
+        "intents"         => $self->intents
     };
 
-    $self->log->debug('[Gateway.pm] [send_ident] Sending OP $op SEQ 0 IDENTIFY');
+    $self->log->debug('[Gateway.pm] [send_ident] Sending OP ' . $op . ' SEQ 0 IDENTIFY');
     $self->send_op($op, $d);
 }
 
@@ -592,12 +590,12 @@ sub send_resume
     my $op = 6;
     my $s = $self->s;
     my $d = {
-        "token"         => $self->token,
-        "session_id"    => $self->session_id,
-        "seq"           => $self->s
+        "token"      => $self->token,
+        "session_id" => $self->session_id,
+        "seq"        => $self->s
     };
 
-    $self->log->debug('[Gateway.pm] [send_resume] Sending OP $op SEQ $s RESUME');
+    $self->log->debug('[Gateway.pm] [send_resume] Sending OP ' . $op . ' SEQ ' . $s . ' RESUME');
     $self->send_op($op, $d);
 }
 
@@ -622,7 +620,7 @@ sub dispatch_ready
 
     # Reset reconnect timer if the bot had been connected for at least a minute
     my $elapsed = $self->last_disconnect - $self->last_connected;
-    $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . duration($elapsed));
+    $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . ( $self->last_connected ? duration($elapsed) : '-'));
     if ( $elapsed >= 60 )
     {
         $self->reconnect_timer(int(rand(5))+1); # Random value from 1-5 seconds
@@ -1069,7 +1067,7 @@ sub on_resume
     my ($self, $tx, $hash) = @_;
     my $t = $hash->{'t'};   # Type
     my $d = $hash->{'d'};   # Data
- 
+
     $self->allow_resume(1); # We are requested to resume.
     $self->gw_disconnect('Resume.');
 }
@@ -1079,9 +1077,18 @@ sub on_invalid_session
     my ($self, $tx, $hash) = @_;
     my $t = $hash->{'t'};   # Type
     my $d = $hash->{'d'};   # Data
- 
-    $self->allow_resume(0); # Have to establish a new session for this.
-    $self->gw_disconnect('Invalid Session.');
+
+    my $msg = 'Invalid Session';
+
+    if (defined $d && $d eq JSON->true) { # FIXME: untested
+        $self->allow_resume(1); # Session may be resumable.
+	$msg .= ' (Possibly Resumable)';
+    }
+    else {
+        $self->allow_resume(0); # Have to establish a new session for this.
+    }
+
+    $self->gw_disconnect($msg . '.');
 }
 
 sub on_hello
@@ -1090,15 +1097,21 @@ sub on_hello
 
     # The Hello packet gives us our heartbeat interval, so we can start sending those.
     $self->heartbeat_interval( $hash->{'d'}{'heartbeat_interval'} / 1000 );
-    $self->heartbeat_loop( Mojo::IOLoop->recurring( $self->heartbeat_interval,
-        sub {
-            my $op = 1;
-            my $d = $self->s;
-            $self->log->debug('[Gateway.pm] [heartbeat] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
-            $self->heartbeat($self->heartbeat-1);
-            $self->send_op($op, $d);
-        }
-    ));
+    $self->log->debug('[Gateway.pm] [on_hello] ' . ( defined $self->s ? 'Res' : 'S') .'tarting heartbeat timer');
+    Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop; # In case we have resumed, the timer gets replaced
+    $self->send_heartbeat if defined $self->s; # send a heartbeat immediately, if we have a sequence number (prevents timing out after resuming)
+    $self->heartbeat_loop( Mojo::IOLoop->recurring( $self->heartbeat_interval => sub { $self->send_heartbeat } ) );
+}
+
+sub send_heartbeat {
+   my $self = shift;
+
+   my $op = 1;
+   my $d = $self->s;
+
+   $self->log->debug('[Gateway.pm] [heartbeat] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
+   $self->heartbeat($self->heartbeat-1);
+   $self->send_op($op, $d);
 }
 
 sub on_heartbeat_ack
