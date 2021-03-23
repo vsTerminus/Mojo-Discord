@@ -24,6 +24,7 @@ use namespace::clean;
 has handlers => ( is => 'ro', default => sub {
         {
             '0'     => \&on_dispatch,        # An event was dispatched.
+            '1'     => \&on_heartbeat_req,   # The gateway explicitly requests a heartbeat from us.
             '7'     => \&on_resume,          # You should attempt to reconnect and resume immediately.
             '9'     => \&on_invalid_session, # The session has been invalidated. You should reconnect and identify/resume accordingly.
             '10'    => \&on_hello,           # Sent immediately after connecting, contains the heartbeat_interval to use.
@@ -446,7 +447,7 @@ sub on_finish
 
     $self->log->debug('[Gateway.pm] [on_finish] Removing heartbeat timer');
     Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop;
-    $self->heartbeat_loop(undef);;
+    $self->heartbeat_loop(undef);
 
     # Block reconnect for specific codes.
     my $no_resume = $self->no_resume;
@@ -533,8 +534,6 @@ sub handle_event
     $op_msg .= " SEQ " . $s if defined $s;
     $op_msg .= " " . $t if defined $t;
 
-    $self->s($s) if defined $s; # Update the latest Sequence Number. Probably more correct would be doing this in on_dispatch as s and t are null when op is not 0
-
     if ( exists $self->handlers->{$op} )
     {
         $self->handlers->{$op}->($self, $tx, $hash);
@@ -605,6 +604,9 @@ sub on_dispatch # OPCODE 0
 
     my $t = $hash->{'t'};   # Type
     my $d = $hash->{'d'};   # Data
+    my $s = $hash->{'s'};   # Sequence
+
+    $self->s($s) if defined $s; # Update the latest Sequence Number.
 
     $self->dispatch($t, $d); # Library's own handlers
     $self->emit($t, $d);     # Event emitter for client
@@ -1097,28 +1099,36 @@ sub on_hello
 
     # The Hello packet gives us our heartbeat interval, so we can start sending those.
     $self->heartbeat_interval( $hash->{'d'}{'heartbeat_interval'} / 1000 );
-    $self->log->debug('[Gateway.pm] [on_hello] ' . ( defined $self->s ? 'Res' : 'S') .'tarting heartbeat timer');
-    Mojo::IOLoop->remove($self->heartbeat_loop) if defined $self->heartbeat_loop; # In case we have resumed, the timer gets replaced
-    $self->send_heartbeat if defined $self->s; # send a heartbeat immediately, if we have a sequence number (prevents timing out after resuming)
+    $self->log->debug('[Gateway.pm] [on_hello] Adding heartbeat timer');
+    $self->send_heartbeat; # send a heartbeat immediately
     $self->heartbeat_loop( Mojo::IOLoop->recurring( $self->heartbeat_interval => sub { $self->send_heartbeat } ) );
 }
 
-sub send_heartbeat {
+sub send_heartbeat
+{
    my $self = shift;
 
    my $op = 1;
    my $d = $self->s;
 
-   $self->log->debug('[Gateway.pm] [heartbeat] Sending OP ' . $op . ' SEQ ' . $self->s . ' HEARTBEAT');
+   $self->log->debug('[Gateway.pm] [heartbeat] Sending OP ' . $op . ' SEQ ' . (defined $self->s ? $self->s : 'null') . ' HEARTBEAT');
    $self->heartbeat($self->heartbeat-1);
    $self->send_op($op, $d);
+}
+
+sub on_heartbeat_req
+{
+    my ($self, $tx, $hash) = @_;
+
+    $self->log->debug('[Gateway.pm] [on_heartbeat_req] Received OP 1 SEQ ' . (defined $self->s ? $self->s : 'null') . ' HEARTBEAT');
+    $self->send_hearbeat;
 }
 
 sub on_heartbeat_ack
 {
     my ($self, $tx, $hash) = @_;
 
-    $self->log->debug('[Gateway.pm] [on_heartbeat_ack] Received OP 11 SEQ ' . $self->s . ' HEARTBEAT ACK');
+    $self->log->debug('[Gateway.pm] [on_heartbeat_ack] Received OP 11 SEQ ' . (defined $self->s ? $self->s : 'null') . ' HEARTBEAT ACK');
     $self->heartbeat($self->heartbeat+1);
 }
 
