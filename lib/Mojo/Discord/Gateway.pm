@@ -423,7 +423,7 @@ sub gw_disconnect
 
     my $tx = $self->tx;
     $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    $tx->finish;
+    $tx->finish(4000); # 1000 and 1001 invalidate the session, 1005 should work but 4000 is a safer bet on keeping the session alive
 }
 
 # Finish the $tx if the connection is closed
@@ -623,6 +623,7 @@ sub dispatch_ready
     # Reset reconnect timer if the bot had been connected for at least a minute
     my $elapsed = $self->last_disconnect - $self->last_connected;
     $self->log->debug('[Gateway.pm] [dispatch_ready] Last connection uptime: ' . ( $self->last_connected ? duration($elapsed) : '-'));
+
     if ( $elapsed >= 60 )
     {
         $self->reconnect_timer(int(rand(5))+1); # Random value from 1-5 seconds
