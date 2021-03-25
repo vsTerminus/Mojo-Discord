@@ -219,6 +219,75 @@ sub send_message
     }
 }
 
+sub send_file
+{
+    my ($self, $dest, $args, $callback) = @_;
+
+    # Accepted image types are: image, video, gifv
+    my $type = $args->{'type'};
+    return unless defined $type and ( lc $type eq 'image' or lc $type eq 'gifv' or lc $type eq 'video' );
+    $self->log->debug("[REST.pm] [send_file] File type '$type' was accepted");
+
+    my $path = $args->{'path'};
+    return unless -f $path;
+    $self->log->debug("[REST.pm] [send_file] File path '$path' exists and is a file");
+
+    my $name = $args->{'name'};
+    return unless defined $name;
+    $self->log->debug("[REST.pm] [send_file] File name '$name' is a name");
+
+    my $content = $args->{'content'} // "";
+       
+    my $route = "POST /channels/$dest";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [send_file] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->send_file($dest, $args, $callback) });
+    }
+    else
+    {
+        my $post_url = Mojo::URL->new($self->base_url . "/channels/$dest/messages");
+        my $headers = {'Content-Type' => 'multipart/form-data'};
+
+        # This was tricky to figure out.
+        # Basically each hashref in the multipart array has to define a body as "file", "content", or "embed".
+        # Additional fields are treated as Headers, such as Content-Type.
+        # Content-Disposition is required to have certain information for Discord, and is a semicolon separated string with potentially multiple key value pairs.
+        # Examples from the discord api: https://discord.com/developers/docs/resources/channel#create-message
+        # Combined with docs from Mojo::UserAgent::Transactor: https://docs.mojolicious.org/Mojo/UserAgent/Transactor
+        # Together I was able to figure out what I required here: One part for the content, one part for the file.
+        $self->ua->post_p($post_url => $headers => multipart =>
+        [
+            {
+                'content'               => $content,
+                'Content-Disposition'   => 'form-data; name="content"',
+            },
+            {
+                'file'                  => $path,
+                'Content-Disposition'   => 'form-data; name="file"; filename="' . $name . '"',
+            }
+        ])->then(sub
+        {
+            my $tx = shift;
+
+            if ( $tx->res->code == 200 )
+            {
+                $self->log->debug("[REST.pm] [send_file] File upload successful");
+                $callback->($tx->res->json) if defined $callback;
+            }
+            else
+            {
+                $self->log->warn("[REST.pm] [send_file] File upload failed with code: " . $tx->res->code . ": " . $tx->res->message);
+                $callback->($tx->error);
+            }
+        })->catch(sub
+        {
+            my $tx = shift;
+            $callback->($tx->error) if defined $callback;
+        });
+    }
+}
+
 sub send_message_content_blocking
 {
     my ($self, $dest, $content, $callback) = @_;
