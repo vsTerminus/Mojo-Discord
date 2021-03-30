@@ -371,6 +371,9 @@ sub gw_connect
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
             $self->on_finish('Websocket Handshake Failed');
+            # Need to completely die here.
+            die "Websocket Handshake Failed; Cannot continue.";
+            Mojo::IOLoop->stop;
             return;
         }
 
