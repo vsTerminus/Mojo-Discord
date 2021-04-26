@@ -140,10 +140,6 @@ has no_resume => ( is => 'ro', default => sub {
     {
         '1000' => 'Normal Closure',
         '1001' => 'Going Away',
-        '1006' => 'Abnormal Closure',
-        '1009' => 'Message Too Big',
-        '1011' => 'Internal Server Err',
-        '1012' => 'Service Restart',
         '4003' => 'Not Authenticated',
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
@@ -375,6 +371,9 @@ sub gw_connect
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
             $self->on_finish('Websocket Handshake Failed');
+            # Need to completely die here.
+            die "Websocket Handshake Failed; Cannot continue.";
+            Mojo::IOLoop->stop;
             return;
         }
 
