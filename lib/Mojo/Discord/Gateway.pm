@@ -715,8 +715,16 @@ sub _set_guild_top_level
     my ($self, $hash) = @_;
 
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
-    my $guild = $self->guilds->{$guild_id};
-    $guild->set_attributes($hash);
+    if ( defined $guild_id )
+    {
+        my $guild = $self->guilds->{$guild_id};
+        $guild->set_attributes($hash);
+    }
+    else
+    {
+        $self->log->warn('[Gateway.pm] [_set_guild_top_level] Received hash with no guild id');
+        $self->log->debug(Data::Dumper->Dump([$hash], ['hash']));
+    }
 }
 
 # This sub adds the channels found in the discord guild hash to the specified guild.
