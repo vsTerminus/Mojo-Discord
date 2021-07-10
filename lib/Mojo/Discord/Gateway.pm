@@ -135,11 +135,9 @@ has close_codes => ( is => 'ro', default => sub {
 
 # Prevent sending a reconnect following certain codes.
 # This always requires a new session to be established if these codes are encountered.
-# Not sure if 1000 and 1001 require this, but I don't think it hurts to include them.
+# Not sure if 1000 and 1001 require this.
 has no_resume => ( is => 'ro', default => sub {
     {
-        '1000' => 'Normal Closure',
-        '1001' => 'Going Away',
         '4003' => 'Not Authenticated',
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
@@ -350,11 +348,13 @@ sub gw_connect
     my $resume = $args{'resume'} // 0;
     $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
-    my $url = $self->gateway();
+    $self->s(undef) unless $resume;
+
+    my $url = $resume ? (defined $self->websocket_url ? $self->websocket_url : $self->gateway()) : $self->gateway();
     unless (defined $url)
     {
         $self->reconnect();
-        return
+        return;
     }
 
 
@@ -416,13 +416,14 @@ sub gw_connect
 # For manually disconnecting the connection
 sub gw_disconnect
 {
-    my ($self, $reason) = @_;
+    my ($self, $reason, $code) = @_;
 
     $reason = "No reason specified." unless defined $reason;
+    $code   = 4000 unless defined $code; # 1000 and 1001 invalidate the session, 1005 should work but 4000 is a safer bet on keeping the session alive
 
     my $tx = $self->tx;
     $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    $tx->finish(4000); # 1000 and 1001 invalidate the session, 1005 should work but 4000 is a safer bet on keeping the session alive
+    $tx->finish($code);
 }
 
 # Finish the $tx if the connection is closed

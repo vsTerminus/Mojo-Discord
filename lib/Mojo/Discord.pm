@@ -349,9 +349,9 @@ sub resume
 
 sub disconnect
 {
-    my ($self, $reason) = @_;
+    my ($self, $reason, $code) = @_;
 
-    $self->gw->gw_disconnect($reason);
+    $self->gw->gw_disconnect($reason, $code);
 }
 
 sub add_user
