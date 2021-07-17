@@ -135,21 +135,25 @@ has close_codes => ( is => 'ro', default => sub {
 
 # Prevent sending a reconnect following certain codes.
 # This always requires a new session to be established if these codes are encountered.
-# Not sure if 1000 and 1001 require this, but I don't think it hurts to include them.
 has no_resume => ( is => 'ro', default => sub {
     {
-        '1000' => 'Normal Closure',
-        '1001' => 'Going Away',
         '4003' => 'Not Authenticated',
         '4007' => 'Invalid Sequence',
         '4009' => 'Session Timeout',
+        'Websocket Handshake Failed' => 'Websocket Handshake Failed'
+    } 
+});
+
+# Prevent reconnecting at all. Kill the app. One of these errors implies the user needs to fix something before trying again.
+has no_hope => ( is => 'ro', default => sub {
+    {
+        '4004' => 'Authentication failed',
         '4010' => 'Invalid Shard',
         '4011' => 'Sharding required',
         '4012' => 'Invalid API version',
         '4013' => 'Invalid intent(s)',
         '4014' => 'Disallowed intent(s)',
-        'Websocket Handshake Failed' => 'Websocket Handshake Failed'
-    } 
+    }
 });
 
 has token               => ( is => 'ro' );
@@ -175,6 +179,8 @@ has gateway_encoding    => ( is => 'ro', default => 'json' );
 has max_websocket_size  => ( is => 'ro', default => 1048576 ); # Should this maybe be a config.ini value??
 has agent               => ( is => 'lazy', builder => sub { my $self = shift; $self->name . ' (' . $self->url . ',' . $self->version . ')' } );
 has allow_resume        => ( is => 'rw', default => 1 );
+has reconnect_attempt_count => ( is => 'rw', default => -1 );
+has max_reconnect_attempts  => ( is => 'ro', default => 0 ); # 0 to disable
 has reconnect_timer     => ( is => 'rw', default => 2 );
 has last_connected      => ( is => 'rw', default => 0 );
 has last_disconnect     => ( is => 'rw', default => 0 );
@@ -242,9 +248,10 @@ sub gateway
     }
     else
     {
+        # If for any reason we fail to retrieve the Gateway URL just die, because it never seems to successfully reconnect.
         $self->log->error("[Gateway.pm] [gateway] Could not retrieve Gateway URL from '$url'");
         $self->log->debug(Data::Dumper->Dump([$tx->res->error], ['error']));
-        return undef; 
+        $self->terminate("Could not retrieve Gateway URL from '$url': " . $tx->res->error->{'message'}); 
     }
 
     $self->log->debug("[Gateway.pm] [gateway] Gateway URL: " . $tx->res->json->{'url'});
@@ -350,13 +357,16 @@ sub gw_connect
     my $resume = $args{'resume'} // 0;
     $self->log->debug('[Gateway.pm] [gw_connect] Resume? ' . $resume);
 
-    my $url = $self->gateway();
+    $self->s(undef) unless $resume; # Reset sequence unless resuming
+
+    # Don't re-fetch the websocket url on resume
+    my $url = $resume ? (defined $self->websocket_url ? $self->websocket_url : $self->gateway()) : $self->gateway();
+
     unless (defined $url)
     {
         $self->reconnect();
-        return
+        return;
     }
-
 
     $url .= "?v=" . $self->gateway_version . "&encoding=" . $self->gateway_encoding;
     $self->log->debug('[Gateway.pm] [gw_connect] Connecting to ' . $url);
@@ -370,10 +380,8 @@ sub gw_connect
         {
             $self->log->error('[Gateway.pm] [gw_connect] Websocket Handshake Failed');
             $self->log->debug('[Gateway.pm] [gw_connect] ' . Data::Dumper->Dump([$tx], ['tx']));
-            $self->on_finish('Websocket Handshake Failed');
             # Need to completely die here.
-            die "Websocket Handshake Failed; Cannot continue.";
-            Mojo::IOLoop->stop;
+            $self->terminate("Websocket Handshake Failed");
             return;
         }
 
@@ -452,7 +460,38 @@ sub on_finish
     my $no_resume = $self->no_resume;
     $self->allow_resume(0) if exists $no_resume->{$code};
 
+    # Shut down the IOLoop for specific codes.
+    my $no_hope = $self->no_hope;
+    $self->terminate($code) if exists $no_hope->{$code};
+
     $self->reconnect();
+}
+
+# End the IOLoop and terminate the application.
+sub terminate
+{
+    my ($self, $code) = @_;
+
+    # If we get something that isn't a close code, just display it as a string.
+    if ( !exists $self->no_hope->{$code} )
+    {
+        say "Exiting application: $code";
+    }
+
+    # If we get 4004 we can suggest the user checks their token value, because chances are they copy/pasted it incorrectly or something.
+    elsif ( $code == 4004 )
+    {
+        say "Code 4004: Authentication Failed. Please double check your token and try again.";
+    }
+
+    # For anything else, display the code and description.
+    else
+    {
+        say "Code $code: " . $self->no_hope->{$code} . ". Cannot continue until the problem is addressed.";
+    }
+
+    # Stop the IOLoop, terminate the application.
+    Mojo::IOLoop->stop;
 }
 
 sub reconnect
@@ -473,17 +512,25 @@ sub reconnect
         {
             $self->log->info('[Gateway.pm] [reconnect] Reconnecting and starting a new session (After waiting ' . $self->reconnect_timer .' seconds)');
             Mojo::IOLoop->timer($self->reconnect_timer => sub { $self->gw_connect('resume' => 0) });
+            $self->reconnect_attempt_count($self->reconnect_attempt_count+1);
 
             if ($self->reconnect_timer < 120) # Wait at most two minutes before attempting to reconnect.
             {
                 $self->reconnect_timer( $self->reconnect_timer+2 ); # Wait two seconds more each time we try to reconnect
                 $self->log->debug("[Gateway.pm] [reconnect] Reconnect timer increased to " . $self->reconnect_timer . " seconds");
             }
+            
+            if ( $self->max_reconnect_attempts > 0 and $self->reconnect_attempt_count >= $self->max_reconnect_attempts )
+            {
+                # Give up. We've tried enough times.
+                $self->terminate("Reached maximum retry attempts (" . $self->max_reconnect_attempts . "). You will have to restart the application manually.");
+            }
         }
     }
     else
     {
         $self->log->info('[Gateway.pm] [reconnect] Automatic reconnect is disabled.');
+        $self->terminate("Auto-reconnect is disabled in your config. You will have to restart the application manually (or via background service such as systemd)");
     }
 }
 
@@ -593,8 +640,20 @@ sub send_resume
         "seq"        => $self->s
     };
 
-    $self->log->debug('[Gateway.pm] [send_resume] Sending OP ' . $op . ' SEQ ' . $s . ' RESUME');
-    $self->send_op($op, $d);
+    if ( defined $s )
+    {
+        $self->log->debug('[Gateway.pm] [send_resume] Sending OP ' . $op . ' SEQ ' . $s . ' RESUME');
+        $self->send_op($op, $d);
+    }
+    else
+    {
+        $self->log->debug('[Gateway.pm] [send_resume] Sending OP ' . $op . ' Undefiend Sequence Number RESUME');
+        say Dumper($tx);
+        say "---- End tx dump ----";
+        say "Cannot resume with undefined sequence number.";
+        $self->allow_resume(0); # We are requested to resume.
+        $self->gw_disconnect('Undefined Sequence; Cannot Resume');
+    }
 }
 
 sub on_dispatch # OPCODE 0
@@ -629,6 +688,7 @@ sub dispatch_ready
         $self->last_connected(time);
     }
 
+    $self->reconnect_attempt_count(0); # Reset the reconnect attempt counter
     $self->log->info('[Gateway.pm] [dispatch_ready] Discord gateway is ready');
 }
 
@@ -736,10 +796,17 @@ sub _set_guild_channels
     my $guild_id = ( exists $hash->{'guild_id'} ? $hash->{'guild_id'} : $hash->{'id'} );
     my $guild = $self->guilds->{$guild_id};
 
-    foreach my $channel_hash (@{$hash->{'channels'}})
+    if ( exists $hash->{'channels'} and ref $hash->{'channels'} eq 'ARRAY' )
     {
-        # Add the channel
-        my $channel = $guild->add_channel($channel_hash);
+        foreach my $channel_hash (@{$hash->{'channels'}})
+        {
+            # Add the channel
+            my $channel = $guild->add_channel($channel_hash);
+        }
+    }
+    else
+    {
+        $self->log->warn('[Gateway.pm] [_set_guild_channels] Received a hash without any channels.');
     }
 }
 
