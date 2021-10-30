@@ -9,5 +9,6 @@ has name            => ( is => 'rw' );
 has require_colons  => ( is => 'rw' );
 has managed         => ( is => 'rw' );
 has roles           => ( is => 'rw' );
+has animated        => ( is => 'rw' );
 
 1;
