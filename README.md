@@ -1,6 +1,8 @@
 # Mojo::Discord
 
-This is a set of Perl Modules designed to implement parts of the Discord public API, build on Mojo::UserAgent and Mojo::IOLoop.
+A Perl wrapper for the Discord API, intended for use primarily with text-based chat bots.
+
+This library was created to facilitate my own Discord Bot, [Goose](https://github.com/vsterminus/Goose).
 
 ## Modules
 
@@ -13,13 +15,15 @@ The primary modules involved are:
 - **Mojo::Discord::User** - Discord User object, stores properties about users
 - **Mojo::Discord::Guild** - Manage all properties related to guilds (Servers)
 
+Below Mojo::Discord::Guild are smaller modules for various guild items such as channels, emoji, and roles.
+
 ## Note: This is a spare-time project
 
-I offer no promises as to code completion, timeline, support, or stability. 
+Best intentions laid bare I have a lot of projects on the go and this one does not always receive the attention it deserves.
 
-You should consider this module HIGHLY VOLATILE and should not rely on it for production code.
+I have not abandoned the project nor do I have any intent to, but when my own needs are met (eg, Goose Bot is working) work on this library often stops.
 
-You are welcome to submit pull requests if you want to build support parts of the API that I have not covered. The API is quite large and there are many aspects of it I have no plans to use and may not ever implement here.
+You are welcome to submit pull requests if you want to build support parts of the API that I have not covered. The API is quite large and there are many aspects of it I have no plans to use and may not ever implement here myself (eg, Voice).
 
 ## Pre-Requisites
 
