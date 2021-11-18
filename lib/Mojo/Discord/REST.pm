@@ -58,7 +58,7 @@ sub _default_rate_limits
 # Every REST call returns rate limit information in the header
 # There is a global rate limit, but also a "per-route" limit
 # This means we need to interogate the headers on every response.
-# See the Discord API docs for more details.
+# See the Discord API docs for more details. https://discord.com/developers/docs/topics/rate-limits
 #
 # This sub is just responsible for recording the returned rate limits, not to enforce them.
 # It overrides the default setter for rate_limits so you can just pass in a Mojo::Header object and not worry about it.
@@ -84,14 +84,18 @@ sub _set_route_rate_limits
         # Valid if x-ratelimit-rest > current value
         $valid = 1 if ( $headers->header('x-ratelimit-reset') > $cache->{'reset'} );
     }
-    
+   
+
     # Assuming we have valid ratelimit headers, update our cache.
+    #
+    # (2021-11-17 Adding one second to the reset and reset-after values to potentially deal with 1 second rate limit resets causing issues. https://github.com/vsTerminus/Mojo-Discord/issues/14)
     if ( $bucket_id and ( $valid or !defined $cache ) )
     { 
+        #$self->log->debug('[REST.pm] [_set_route_rate_limits] Route "' . $route . '" has a rate limit. Reset In ' . $headers->header('x-ratelimit-reset-after') . ' seconds');
         $self->rate_buckets->{$bucket_id}{'limit'} = $headers->header('x-ratelimit-limit');
-        $self->rate_buckets->{$bucket_id}{'reset'} = $headers->header('x-ratelimit-reset');
+        $self->rate_buckets->{$bucket_id}{'reset'} = $headers->header('x-ratelimit-reset') + 1;
         $self->rate_buckets->{$bucket_id}{'remaining'} = $headers->header('x-ratelimit-remaining');
-        $self->rate_buckets->{$bucket_id}{'reset_after'} = $headers->header('x-ratelimit-reset-after');
+        $self->rate_buckets->{$bucket_id}{'reset_after'} = $headers->header('x-ratelimit-reset-after') + 1;
     }
     # Else - ignore it, we already have more current information.
 }
