@@ -249,9 +249,10 @@ sub gateway
     else
     {
         # If for any reason we fail to retrieve the Gateway URL just die, because it never seems to successfully reconnect.
-        $self->log->error("[Gateway.pm] [gateway] Could not retrieve Gateway URL from '$url'");
+        $self->log->error("[Gateway.pm] [gateway] Could not retrieve Gateway URL from '$url'. See logs for more details. Defaulting to 'wss://gateway.discord.gg'");
         $self->log->debug(Data::Dumper->Dump([$tx->res->error], ['error']));
-        $self->terminate("Could not retrieve Gateway URL from '$url': " . $tx->res->error->{'message'}); 
+        #$self->terminate("Could not retrieve Gateway URL from '$url': " . $tx->res->error->{'message'}); 
+        $self->websocket_url('wss://gateway.discord.gg');
     }
 
     $self->log->debug("[Gateway.pm] [gateway] Gateway URL: " . $tx->res->json->{'url'});
