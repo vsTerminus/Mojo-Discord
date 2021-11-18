@@ -26,7 +26,7 @@ Note: This module implements only a subset of the available API calls. Additiona
     use Mojo::Discord;
     use namespace::clean;
 
-    has token       => ( is => 'ro' );
+    has token       => ( is => 'ro', default => 'mfa._u3HDhUm or whatever, but you should really use a config file' );
     has url         => ( is => 'ro', default => 'https://mywebsite.com' );
     has version     => ( is => 'ro', default => '1.0' );
     has reconnect   => ( is => 'rw', default => 1 );
@@ -239,9 +239,6 @@ has loglevel    => ( is => 'rw', default => 'debug' );
 
 L<Mojo::Discord> provides the following subs you may want to leverage
 
-=head2 init()
-    Writes a "New session beginning" message to the log and starts the connection to Discord's Gateway. You should call this and then start Mojo::IOLoop when you're ready to start your bot.
-
 =head2 connected()
     Performs some validation to see if the Gateway is still connected and valid. Returns boolean.
 
@@ -299,6 +296,18 @@ L<Mojo::Discord> provides the following subs you may want to leverage
 
 =cut
 
+
+=head2 init()
+    Writes a "New session beginning" message to the log and starts the connection to Discord's Gateway. You should call this and then start Mojo::IOLoop when you're ready to start your bot.
+=cut
+
+sub init
+{
+    my $self = shift;
+    $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
+    $self->gw->gw_connect();
+}
+
 # Validate the format of any channel, user, guild or similar ID.
 # Make sure it's defined, numeric, and positive.
 # Returns 1 if it passes everything.
@@ -327,13 +336,6 @@ sub _valid_id
     return 1;
 }
 
-sub init
-{
-    my $self = shift;
-    $self->log->info('[Discord.pm] [init] New session beginning ' . localtime(time));
-    $self->gw->gw_connect();
-}
-
 sub connected
 {
     my $self = shift;
@@ -349,9 +351,9 @@ sub resume
 
 sub disconnect
 {
-    my ($self, $reason) = @_;
+    my ($self, $reason, $code) = @_;
 
-    $self->gw->gw_disconnect($reason);
+    $self->gw->gw_disconnect($reason, $code);
 }
 
 sub add_user

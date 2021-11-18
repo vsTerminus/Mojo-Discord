@@ -237,6 +237,7 @@ sub status_update
 sub gateway
 {
     my $self = shift;
+    
     my $url = $self->gateway_url;
     my $ua = $self->ua;
     my $tx = $ua->get($url);    # Fetch the Gateway WS URL
@@ -425,13 +426,14 @@ sub gw_connect
 # For manually disconnecting the connection
 sub gw_disconnect
 {
-    my ($self, $reason) = @_;
+    my ($self, $reason, $code) = @_;
 
     $reason = "No reason specified." unless defined $reason;
+    $code = 4000 unless defined $code; # 4000 is a safe bet on keeping the session alive
 
     my $tx = $self->tx;
-    $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason);
-    $tx->finish(4000); # 1000 and 1001 invalidate the session, 1005 should work but 4000 is a safer bet on keeping the session alive
+    $self->log->info('[Gateway.pm] [gw_disconnect] Closing websocket with reason: ' . $reason . ' (Code: ' . $code . ')');
+    $tx->finish($code);
 }
 
 # Finish the $tx if the connection is closed
