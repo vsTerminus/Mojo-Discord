@@ -952,6 +952,43 @@ sub remove_guild_member_role
     }
 }
 
+# Create a new invite
+# Is non-blocking if $callback is defined
+sub create_invite
+{
+    my ($self, $channel, $params, $callback) = @_;
+
+    # Next, create the empty JSON object if $params wasn't provided.
+    my $json = $params // {};
+
+    my $route = "POST /channels/$channel/invites";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [create_invite] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->create_invite($channel, $params, $callback) });
+    }
+    else
+    {
+        # Next, call the endpoint
+        my $url = $self->base_url . "/channels/$channel/invites";
+        if ( defined $callback )
+        {
+            $self->ua->post($url => json => $json => sub
+            {
+                my ($ua, $tx) = @_;
+
+                $self->_set_route_rate_limits($route, $tx->res->headers);
+
+                $callback->($tx->res->json);
+            });
+        }
+        else
+        {
+            return $self->ua->post($url => json => $json);
+        }
+    }
+}
+
 1;
 
 =head1 NAME
