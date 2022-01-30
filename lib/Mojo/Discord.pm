@@ -294,6 +294,17 @@ L<Mojo::Discord> provides the following subs you may want to leverage
     Takes a channel ID, a message ID, an Emoji (either Unicode or in the custom emoji format) and an optional callback
     Adds the emoji to the message as a reaction
 
+=head2 create_invite
+    Takes a channel ID, optional parameters, and an optional callback
+    Returns the response from the server
+
+    The following code can be used to obtain the invitation code and generate a link for end users
+
+        use Mojo::JSON qw(decode_json);
+        my $invitation = $self->discord->create_invite($channel_id);
+        my $invite = decode_json($invitation->{res}->{content}->{asset}->{content});
+        print "Invitation:  https://www.discord.gg/$invite->{code}\n";
+
 =cut
 
 
@@ -711,6 +722,13 @@ sub remove_guild_member_role_p
     $self->remove_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
 
     return $promise;
+};
+
+sub create_invite
+{
+    my ($self, $channel, $params, $callback) = @_;
+
+    return $self->rest->create_invite($channel, $params, $callback);
 };
 
 1;
