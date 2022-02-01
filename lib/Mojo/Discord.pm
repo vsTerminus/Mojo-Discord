@@ -305,6 +305,9 @@ L<Mojo::Discord> provides the following subs you may want to leverage
         my $invite = decode_json($invitation->{res}->{content}->{asset}->{content});
         print "Invitation:  https://www.discord.gg/$invite->{code}\n";
 
+=head2 create_invite_p
+    Promise version of create_invite; Instead of taking a callback it returns a promise.
+
 =cut
 
 
@@ -704,7 +707,7 @@ sub add_guild_member_role_p
     $self->add_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
 
     return $promise;
-};
+}
 
 sub remove_guild_member_role
 {
@@ -722,14 +725,25 @@ sub remove_guild_member_role_p
     $self->remove_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
 
     return $promise;
-};
+}
 
 sub create_invite
 {
     my ($self, $channel, $params, $callback) = @_;
 
     return $self->rest->create_invite($channel, $params, $callback);
-};
+}
+
+sub create_invite_p
+{
+    my ($self, $channel, $params) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->create_invite($channel, $params, sub { $promise->resolve(shift) });
+
+    return $promise;
+}
 
 1;
 
