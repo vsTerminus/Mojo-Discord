@@ -9,6 +9,7 @@ extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
+use Mojo::JSON qw(decode_json);
 use URI::Escape;
 use Data::Dumper;
 use Carp;
@@ -949,6 +950,60 @@ sub remove_guild_member_role
 
             $callback->($tx->res->json) if defined $callback;
         });
+    }
+}
+
+# Create a new invite
+# Is non-blocking if $callback is defined
+sub create_invite
+{
+    my ($self, $channel, $params, $callback) = @_;
+
+    # Next, create the empty JSON object if $params wasn't provided.
+    my $json = $params // {};
+
+    my $route = "POST /channels/$channel/invites";
+    if ( my $delay = $self->_rate_limited($route) )
+    {
+        $self->log->warn('[REST.pm] [create_invite] Route is rate limited. Trying again in ' . $delay . ' seconds');
+        Mojo::IOLoop->timer($delay => sub { $self->create_invite($channel, $params, $callback) });
+    }
+    else
+    {
+        # Next, call the endpoint
+        my $url = $self->base_url . "/channels/$channel/invites";
+        if ( defined $callback )
+        {
+            $self->ua->post($url => {Accept => 'application/json'} => json => {a => 'b'} => sub
+            {
+                my ($ua, $tx) = @_;
+
+                $self->_set_route_rate_limits($route, $tx->res->headers);
+
+                my $content = decode_json($tx->res->content->asset->{content});
+
+                # Augment this object with a Mojo::URL object, since all we get is the code by default.
+                my $url = Mojo::URL->new('https://www.discord.gg');
+                $url->path($content->{'code'});
+                $content->{'url'} = $url;
+
+                $callback->($content);
+            });
+        }
+        else
+        {
+            my $json = $self->ua->post($url => {Accept => 'application/json'} => json => $json);
+            $self->_set_route_rate_limits($route, $json->res->headers);
+
+            my $content = decode_json($json->res->content->asset->{content});
+
+            # Augment this object with a Mojo::URL object, since all we get is the code by default.
+            my $url = Mojo::URL->new('https://www.discord.gg');
+            $url->path($content->{'code'});
+            $content->{'url'} = $url;
+
+            return $content;
+        }
     }
 }
 

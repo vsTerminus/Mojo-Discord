@@ -294,6 +294,24 @@ L<Mojo::Discord> provides the following subs you may want to leverage
     Takes a channel ID, a message ID, an Emoji (either Unicode or in the custom emoji format) and an optional callback
     Adds the emoji to the message as a reaction
 
+=head2 create_invite
+    Takes a channel ID, optional parameters, and an optional callback
+    Returns an invite object that has been augmented with a "url" property filled with a Mojo::URL object
+
+    The following code can be used to obtain the invitation code and generate a link for end users
+
+        my $invite = $self->discord->create_invite($channel_id);
+
+        # The following two options produce the same result
+        my $code = $invite->{'code'};
+        print "Invitation:  https://www.discord.gg/$code\n";
+
+        my $url = $invite->{'url'};
+        print "Invitation: $url";
+
+=head2 create_invite_p
+    Promise version of create_invite; Instead of taking a callback it returns a promise.
+
 =cut
 
 
@@ -693,7 +711,7 @@ sub add_guild_member_role_p
     $self->add_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
 
     return $promise;
-};
+}
 
 sub remove_guild_member_role
 {
@@ -711,7 +729,36 @@ sub remove_guild_member_role_p
     $self->remove_guild_member_role($guild_id, $user_id, $role_id, sub { $promise->resolve(shift) });
 
     return $promise;
-};
+}
+
+sub create_invite
+{
+    my ($self, $channel, $params, $callback) = @_;
+
+    # This is so dumb. I should just drop callbacks and go to promises. Or pass parameters as hashrefs so the order doesn't matter.
+    # $params is optional and might be defined with the callback function and we need to sort it out.
+    if ( defined $params and ref $params eq 'CODE' )
+    {
+        $callback = $params;
+        $params = {};
+    }
+
+    # params also might not be defined at all, in which case we need to set a default value
+    $params //= {};
+
+    $self->rest->create_invite($channel, $params, $callback);
+}
+
+sub create_invite_p
+{
+    my ($self, $channel, $params) = @_;
+
+    my $promise = Mojo::Promise->new;
+
+    $self->create_invite($channel, $params, sub { $promise->resolve(shift) });
+
+    return $promise;
+}
 
 1;
 
