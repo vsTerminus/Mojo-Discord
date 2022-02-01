@@ -731,7 +731,18 @@ sub create_invite
 {
     my ($self, $channel, $params, $callback) = @_;
 
-    return $self->rest->create_invite($channel, $params, $callback);
+    # This is so dumb. I should just drop callbacks and go to promises. Or pass parameters as hashrefs so the order doesn't matter.
+    # $params is optional and might be defined with the callback function and we need to sort it out.
+    if ( defined $params and ref $params eq 'CODE' )
+    {
+        $callback = $params;
+        $params = {};
+    }
+
+    # params also might not be defined at all, in which case we need to set a default value
+    $params //= {};
+
+    $self->rest->create_invite($channel, $params, $callback);
 }
 
 sub create_invite_p
