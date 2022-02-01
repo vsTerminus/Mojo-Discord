@@ -9,6 +9,7 @@ extends 'Mojo::Discord';
 
 use Mojo::UserAgent;
 use Mojo::Util qw(b64_encode);
+use Mojo::JSON qw(decode_json);
 use URI::Escape;
 use Data::Dumper;
 use Carp;
@@ -973,18 +974,35 @@ sub create_invite
         my $url = $self->base_url . "/channels/$channel/invites";
         if ( defined $callback )
         {
-            $self->ua->post($url => json => $json => sub
+            $self->ua->post($url => {Accept => 'application/json'} => json => {a => 'b'} => sub
             {
                 my ($ua, $tx) = @_;
 
                 $self->_set_route_rate_limits($route, $tx->res->headers);
 
-                $callback->($tx->res->json);
+                my $content = decode_json($tx->res->content->asset->{content});
+
+                # Augment this object with a Mojo::URL object, since all we get is the code by default.
+                my $url = Mojo::URL->new('https://www.discord.gg');
+                $url->path($content->{'code'});
+                $content->{'url'} = $url;
+
+                $callback->($content);
             });
         }
         else
         {
-            return $self->ua->post($url => json => $json);
+            my $json = $self->ua->post($url => {Accept => 'application/json'} => json => $json);
+            $self->_set_route_rate_limits($route, $json->res->headers);
+
+            my $content = decode_json($json->res->content->asset->{content});
+
+            # Augment this object with a Mojo::URL object, since all we get is the code by default.
+            my $url = Mojo::URL->new('https://www.discord.gg');
+            $url->path($content->{'code'});
+            $content->{'url'} = $url;
+
+            return $content;
         }
     }
 }

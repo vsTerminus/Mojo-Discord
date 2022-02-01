@@ -296,14 +296,18 @@ L<Mojo::Discord> provides the following subs you may want to leverage
 
 =head2 create_invite
     Takes a channel ID, optional parameters, and an optional callback
-    Returns the response from the server
+    Returns an invite object that has been augmented with a "url" property filled with a Mojo::URL object
 
     The following code can be used to obtain the invitation code and generate a link for end users
 
-        use Mojo::JSON qw(decode_json);
-        my $invitation = $self->discord->create_invite($channel_id);
-        my $invite = decode_json($invitation->{res}->{content}->{asset}->{content});
-        print "Invitation:  https://www.discord.gg/$invite->{code}\n";
+        my $invite = $self->discord->create_invite($channel_id);
+
+        # The following two options produce the same result
+        my $code = $invite->{'code'};
+        print "Invitation:  https://www.discord.gg/$code\n";
+
+        my $url = $invite->{'url'};
+        print "Invitation: $url";
 
 =head2 create_invite_p
     Promise version of create_invite; Instead of taking a callback it returns a promise.
