@@ -943,7 +943,7 @@ sub _set_guild_webhooks
 {
     my ($self, $json) = @_;
 
-    if ( ref $json ne 'ARRAY' )
+    if ( defined $json && ref $json ne 'ARRAY' )
     {
         say "\tCannot query guild webhooks: " . $json->{'message'} . " (" . $json->{'code'} . ")";
         return;
